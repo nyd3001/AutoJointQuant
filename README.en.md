@@ -1,27 +1,22 @@
-# AutoJointQuant
-
-[![CI](https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml/badge.svg)](https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-
-[中文说明](README.md)
-
-AutoJointQuant is a multi-account JoinQuant daily check-in CLI with scheduling. It logs in, solves the puzzle, checks in, and reports points without Computer Use.
-It performs only the daily check-in. macOS is validated live; Linux and NixOS are configured but not yet validated on real systems.
-Chrome/Chromium is supported; Firefox is not currently supported.
+<div align="center">
+  <h1>AutoJointQuant</h1>
+  <p>Automated multi-account JoinQuant check-in with scheduling, puzzle solving, and point reporting—without Computer Use.</p>
+  <p><strong>macOS:</strong> verified · <strong>Linux/NixOS:</strong> pending · <strong>Browser:</strong> Chrome/Chromium</p>
+  <p>
+    <a href="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="CHANGELOG.md"><img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-blue.svg"></a>
+    <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  </p>
+  <p><a href="README.md">中文</a></p>
+</div>
 
 ## Installation
-
-Clone the project first:
-
-```bash
-git clone https://github.com/nyd3001/AutoJointQuant.git
-cd AutoJointQuant
-```
 
 ### Option 1: Nix (recommended)
 
 ```bash
+git clone https://github.com/nyd3001/AutoJointQuant.git
+cd AutoJointQuant
 nix profile install .
 ```
 
@@ -30,6 +25,8 @@ The Nix package includes Node.js and the puzzle-solver dependencies. Linux/NixOS
 ### Option 2: uv
 
 ```bash
+git clone https://github.com/nyd3001/AutoJointQuant.git
+cd AutoJointQuant
 uv tool install .
 ```
 

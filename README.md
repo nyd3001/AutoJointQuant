@@ -1,27 +1,22 @@
-# AutoJointQuant
-
-[![CI](https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml/badge.svg)](https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-
-[English README](README.en.md)
-
-AutoJointQuant 是支持多账号和定时任务的聚宽每日签到 CLI，可自动登录、完成拼图验证、签到并返回积分，不依赖 Computer Use。
-项目只执行每日签到。目前已在 macOS 实机验证；Linux/NixOS 已提供配置，但尚未实机验证。
-当前使用 Chrome/Chromium，暂不支持 Firefox。
+<div align="center">
+  <h1>AutoJointQuant</h1>
+  <p>聚宽多账号自动签到：支持定时任务、拼图验证和积分回显，不依赖 Computer Use。</p>
+  <p><strong>macOS：</strong>已验证 · <strong>Linux/NixOS：</strong>待验证 · <strong>浏览器：</strong>Chrome/Chromium</p>
+  <p>
+    <a href="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="CHANGELOG.md"><img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-blue.svg"></a>
+    <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  </p>
+  <p><a href="README.en.md">English</a></p>
+</div>
 
 ## 安装
-
-先获取项目：
-
-```bash
-git clone https://github.com/nyd3001/AutoJointQuant.git
-cd AutoJointQuant
-```
 
 ### 方式一：Nix（推荐）
 
 ```bash
+git clone https://github.com/nyd3001/AutoJointQuant.git
+cd AutoJointQuant
 nix profile install .
 ```
 
@@ -30,6 +25,8 @@ Nix package 已包含 Node.js 和拼图求解依赖，Linux/NixOS 下也包含 C
 ### 方式二：uv
 
 ```bash
+git clone https://github.com/nyd3001/AutoJointQuant.git
+cd AutoJointQuant
 uv tool install .
 ```
 
