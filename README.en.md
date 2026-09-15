@@ -107,10 +107,9 @@ Successful output includes awarded, available, and lifetime points:
 
 ```text
 [joinquant] 积分结果：本次=5，可用=55，累计=55
-AUTOJOINQUANT_RESULT={"status":"checked-in","pointsAwarded":5,"pointsAvailable":55,"pointsTotal":55}
 ```
 
-Results are stored per account and shown by `autojoinquant status <alias>`. A run succeeds only with real page evidence. Incomplete point extraction exits with code `4`; do not retry automatically.
+The CLI parses structured results internally without printing a duplicate line. Results are stored per account and shown by `autojoinquant status <alias>` or `status --json`. A run succeeds only with real page evidence. Incomplete point extraction exits with code `4`; do not retry automatically.
 
 ## Platforms
 

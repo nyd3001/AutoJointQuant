@@ -142,7 +142,6 @@ def run_automation(
     destination = output or sys.stdout
     assert process.stdout is not None
     for line in process.stdout:
-        print(line, end="", file=destination)
         if line.startswith(RESULT_PREFIX):
             try:
                 parsed = json.loads(line[len(RESULT_PREFIX) :])
@@ -150,7 +149,12 @@ def run_automation(
                 continue
             if isinstance(parsed, dict):
                 result = parsed
+            continue
+        print(line, end="", file=destination)
     return_code = process.wait()
+    if not diagnose and result is None and return_code == 0:
+        print("[joinquant] 内部结果缺失，无法确认本次运行状态", file=destination)
+        return_code = 1
     if execute and result is not None:
         result["recordedAt"] = datetime.now(timezone.utc).isoformat()
         result["exitCode"] = return_code

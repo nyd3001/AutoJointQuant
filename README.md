@@ -107,10 +107,9 @@ printf '%s\n' "$JOINQUANT_PASSWORD" | \
 
 ```text
 [joinquant] 积分结果：本次=5，可用=55，累计=55
-AUTOJOINQUANT_RESULT={"status":"checked-in","pointsAwarded":5,"pointsAvailable":55,"pointsTotal":55}
 ```
 
-结果按账号保存，可用 `autojoinquant status <别名>` 查看。只有页面出现真实成功证据时才确认签到；积分读取不完整会返回退出码 `4`，此时不要自动重试。
+结构化结果在 CLI 内部解析，不重复打印；结果按账号保存，可用 `autojoinquant status <别名>` 或 `status --json` 查看。只有页面出现真实成功证据时才确认签到；积分读取不完整会返回退出码 `4`，此时不要自动重试。
 
 ## 平台说明
 
