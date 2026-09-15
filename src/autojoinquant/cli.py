@@ -164,6 +164,8 @@ def _prompt_yes_no(prompt: str, default: bool) -> bool:
 
 
 def _schedule_choice(args: argparse.Namespace, existing: bool) -> bool:
+    if args.no_schedule and args.time:
+        raise ConfigError("--time cannot be combined with --no-schedule")
     if args.schedule or args.time:
         return True
     if args.no_schedule:
@@ -357,7 +359,17 @@ def _run_config_remove(args: argparse.Namespace) -> int:
         if not _prompt_yes_no(f"Remove user {alias!r}, credentials, and timer?", False):
             print("Cancelled.")
             return 0
-    remove_schedule(alias, args.backend or user.schedule_backend)
+    backend = args.backend or user.schedule_backend
+    if user.schedule_enabled:
+        remove_schedule(alias, backend)
+    else:
+        try:
+            timer = schedule_status(alias, backend)
+            if timer.installed:
+                remove_schedule(alias, backend)
+        except SchedulerError:
+            # Removing an unscheduled account must still work on a host without a scheduler.
+            pass
     removed_credentials = remove_credentials(user.env_file)
     save_settings(without_user(settings, alias), config_path)
     print(f"Removed user: {alias}")
