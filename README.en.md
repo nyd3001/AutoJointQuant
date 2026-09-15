@@ -35,49 +35,45 @@ The uv installation requires Python 3.10+, uv, Node.js 22+, and Chrome/Chromium.
 ## Quick start
 
 ```bash
-# 1. Add an account; prompts cover username, hidden password, schedule, and time
+# Add an account; follow the prompts for credentials and scheduling
 autojoinquant config add main
 
-# 2. Preview first: visit the page without login, check-in, or slider movement
+# Preview, check in, and inspect status
 autojoinquant run main --dry-run
-
-# 3. Perform one real check-in
 autojoinquant run main
-
-# 4. Inspect the environment, scheduler, and last points
 autojoinquant status main
+
+# Manage accounts
+autojoinquant config list
+autojoinquant config edit main
+autojoinquant config remove main
+
+# Manage schedules
+autojoinquant schedule start main --time 08:30
+autojoinquant schedule status main
+autojoinquant schedule remove main
 ```
 
-`run <alias>` changes website state by default. Use `--dry-run` after an upgrade, on a new host, or when page behavior changes.
-
-## Commands
-
-```text
-autojoinquant config add <alias>
-autojoinquant config list [--json]
-autojoinquant config edit <alias>
-autojoinquant config remove <alias> [--yes]
-
-autojoinquant run <alias> [--dry-run]
-autojoinquant status [alias] [--json]
-
-autojoinquant schedule start <alias> [--time HH:MM]
-autojoinquant schedule status <alias>
-autojoinquant schedule remove <alias>
-```
-
-Use `autojoinquant <command> --help` for complete options.
+Run `--dry-run` before first use or after environment changes. Use `autojoinquant <command> --help` for all options.
 
 ## Uninstall
 
-Remove every account timer before uninstalling:
+### Nix
 
 ```bash
-autojoinquant config list
+autojoinquant schedule remove main
+nix profile remove autojoinquant
+```
+
+### uv
+
+```bash
 autojoinquant schedule remove main
 uv tool uninstall autojoinquant
 ```
 
-For Nix, locate the entry with `nix profile list`, then run `nix profile remove <name>`. Uninstalling the command does not remove `~/.config/autojoinquant`, browser profiles, or result history.
+Uninstalling does not remove account data or result history.
 
-Current version: `v0.3.0`. Run `autojoinquant --version` to inspect the installed version. See [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under the [MIT License](LICENSE).
+<div align="center">
+  <a href="CHANGELOG.md">Changelog</a> · <a href="SECURITY.md">Security</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a>
+</div>

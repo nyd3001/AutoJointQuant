@@ -35,49 +35,45 @@ uv 安装需要 Python 3.10+、uv、Node.js 22+ 和 Chrome/Chromium。
 ## 快速开始
 
 ```bash
-# 1. 添加账号；程序会询问用户名、隐藏密码、是否定时以及执行时间
+# 添加账号；按提示输入用户名、密码和定时设置
 autojoinquant config add main
 
-# 2. 首次先预演：访问页面，但不登录、不签到、不拖动滑块
+# 预演、签到、查看状态
 autojoinquant run main --dry-run
-
-# 3. 执行一次真实签到
 autojoinquant run main
-
-# 4. 查看环境、scheduler 和最后积分
 autojoinquant status main
+
+# 管理账号
+autojoinquant config list
+autojoinquant config edit main
+autojoinquant config remove main
+
+# 管理定时任务
+autojoinquant schedule start main --time 08:30
+autojoinquant schedule status main
+autojoinquant schedule remove main
 ```
 
-`run <alias>` 默认会修改网站状态。升级程序、更换机器或页面行为异常时，应先运行 `--dry-run`。
-
-## 命令
-
-```text
-autojoinquant config add <alias>
-autojoinquant config list [--json]
-autojoinquant config edit <alias>
-autojoinquant config remove <alias> [--yes]
-
-autojoinquant run <alias> [--dry-run]
-autojoinquant status [alias] [--json]
-
-autojoinquant schedule start <alias> [--time HH:MM]
-autojoinquant schedule status <alias>
-autojoinquant schedule remove <alias>
-```
-
-完整参数使用 `autojoinquant <command> --help` 查看。
+首次使用或环境变化后先执行 `--dry-run`；完整参数使用 `autojoinquant <command> --help` 查看。
 
 ## 卸载
 
-先删除每个账号的 timer，再卸载程序：
+### Nix
 
 ```bash
-autojoinquant config list
+autojoinquant schedule remove main
+nix profile remove autojoinquant
+```
+
+### uv
+
+```bash
 autojoinquant schedule remove main
 uv tool uninstall autojoinquant
 ```
 
-Nix 安装可用 `nix profile list` 找到条目后执行 `nix profile remove <name>`。卸载命令不会删除 `~/.config/autojoinquant`、浏览器 profile 或历史结果。
+卸载不会删除账号数据和历史结果。
 
-当前版本：`v0.3.0`。运行 `autojoinquant --version` 查看已安装版本；版本历史见 [CHANGELOG.md](CHANGELOG.md)。安全策略见 [SECURITY.md](SECURITY.md)，贡献指南见 [CONTRIBUTING.md](CONTRIBUTING.md)。项目使用 [MIT License](LICENSE)。
+<div align="center">
+  <a href="CHANGELOG.md">Changelog</a> · <a href="SECURITY.md">Security</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a>
+</div>
