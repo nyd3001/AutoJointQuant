@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-09-15
+
 - Hid the internal `AUTOJOINQUANT_RESULT` bridge line from normal CLI output; structured data remains available through `status --json`.
 - Reworked both READMEs into a concise quick-start and command reference, including uninstall and platform caveats.
 - Replaced the single-account interface with an alias-based multi-account registry: `config add/list/edit/remove`, `run <alias>`, `status [alias]`, and `schedule start/remove/status <alias>`.
