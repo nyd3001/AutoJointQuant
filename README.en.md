@@ -1,7 +1,6 @@
 <h1 align="center">AutoJointQuant</h1>
 <p align="center">Automated multi-account JoinQuant check-in with scheduling, puzzle solving, and point reporting—without Computer Use.</p>
 <p align="center"><strong>macOS:</strong> verified · <strong>Linux/NixOS:</strong> pending · <strong>Browser:</strong> Chrome/Chromium</p>
-<p align="center"><a href="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml">CI</a> · <a href="CHANGELOG.md">v0.3.0</a> · <a href="LICENSE">MIT</a></p>
 <p align="center"><a href="README.md">中文</a></p>
 
 ## Installation
