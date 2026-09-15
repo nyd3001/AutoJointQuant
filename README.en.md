@@ -67,6 +67,14 @@ nix profile install .
 autojoinquant --version
 ```
 
+No system Node.js installation is required. The three Nix entry points have different scopes:
+
+| Entry point | Scope | Use case |
+| --- | --- | --- |
+| `nix develop` | Current development shell only | Provides Node.js 22, uv, Python, and puzzle-solver dependencies |
+| `nix run . -- <command>` | One process | Runs the CLI temporarily without installing it |
+| `nix profile install .` | Persistent for the current user | Recommended for normal use and schedulers |
+
 Run without installing:
 
 ```bash
@@ -297,6 +305,7 @@ uv run ruff check .
 
 # Complete Nix environment and checks
 nix develop
+nix develop --command node --version
 nix flake check
 ```
 

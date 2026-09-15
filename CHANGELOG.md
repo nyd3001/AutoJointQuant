@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Made `nix develop` self-contained for browser-driver development by providing Node.js 22, uv, Python, and the puzzle solver dependencies, with explicit runtime paths.
 - Reorganized both READMEs around the mature project structure used by `remote-cli`: features, requirements, installation, configuration, command contracts, platform evidence, troubleshooting, and release guidance.
 
 ## 0.3.0 - 2026-09-15

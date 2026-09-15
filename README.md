@@ -67,6 +67,14 @@ nix profile install .
 autojoinquant --version
 ```
 
+系统不需要预装 Node.js。三种 Nix 入口的作用不同：
+
+| 入口 | 作用域 | 适用场景 |
+| --- | --- | --- |
+| `nix develop` | 仅当前开发 shell | 提供 Node.js 22、uv、Python 和拼图求解依赖 |
+| `nix run . -- <命令>` | 单次运行 | 临时执行 CLI，不安装全局命令 |
+| `nix profile install .` | 当前用户、持久化 | 日常使用和 scheduler；推荐 |
+
 不安装、临时运行：
 
 ```bash
@@ -297,6 +305,7 @@ uv run ruff check .
 
 # 完整 Nix 环境和检查
 nix develop
+nix develop --command node --version
 nix flake check
 ```
 

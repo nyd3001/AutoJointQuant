@@ -85,24 +85,30 @@
           '';
         });
 
-      devShells = forAllSystems ({ pkgs }: {
-        default = pkgs.mkShell {
-          packages = [
-            pkgs.python312
-            pkgs.uv
-            pkgs.nodejs_22
-          ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
-            pkgs.chromium
-          ];
-          shellHook = ''
-            echo "JoinQuant check-in development shell"
-            echo "Run: uv sync && uv run pytest"
-            ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
-              export JOINQUANT_CHROME_BIN="${pkgs.chromium}/bin/chromium"
-              echo "JOINQUANT_CHROME_BIN=$JOINQUANT_CHROME_BIN"
-            ''}
-          '';
-        };
-      });
+      devShells = forAllSystems ({ pkgs }:
+        let
+          python = pythonFor pkgs;
+        in {
+          default = pkgs.mkShell {
+            packages = [
+              python
+              pkgs.uv
+              pkgs.nodejs_22
+            ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+              pkgs.chromium
+            ];
+            shellHook = ''
+              echo "JoinQuant check-in development shell"
+              export JOINQUANT_NODE_BIN="${pkgs.nodejs_22}/bin/node"
+              export JOINQUANT_PYTHON="${python}/bin/python"
+              echo "Node: $(node --version)"
+              echo "Run: uv sync --locked && uv run pytest"
+              ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+                export JOINQUANT_CHROME_BIN="${pkgs.chromium}/bin/chromium"
+                echo "JOINQUANT_CHROME_BIN=$JOINQUANT_CHROME_BIN"
+              ''}
+            '';
+          };
+        });
     };
 }
