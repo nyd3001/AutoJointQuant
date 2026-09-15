@@ -28,7 +28,7 @@ uv 安装需要 Python 3.10+、uv、Node.js 22+ 和 Chrome/Chromium。
 ## 快速开始
 
 ```bash
-# 添加账号；按提示输入用户名、密码和定时设置
+# 添加账号；按提示输入用户名、确认密码和定时设置
 autojoinquant config add main
 
 # 预演、签到、查看状态

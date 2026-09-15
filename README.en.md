@@ -28,7 +28,7 @@ The uv installation requires Python 3.10+, uv, Node.js 22+, and Chrome/Chromium.
 ## Quick start
 
 ```bash
-# Add an account; follow the prompts for credentials and scheduling
+# Add an account; confirm the password when prompted
 autojoinquant config add main
 
 # Preview, check in, and inspect status

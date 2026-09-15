@@ -141,6 +141,10 @@ def _prompt_password(existing: str, password_stdin: bool) -> str:
     elif sys.stdin.isatty():
         suffix = " (press Enter to keep the current password)" if existing else ""
         value = getpass.getpass(f"JoinQuant password{suffix}: ")
+        if value:
+            confirmation = getpass.getpass("Confirm JoinQuant password: ")
+            if value != confirmation:
+                raise ConfigError("passwords do not match")
     elif existing:
         return existing
     else:

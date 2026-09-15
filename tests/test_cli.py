@@ -46,6 +46,30 @@ def test_config_add_and_remove_without_exposing_password(monkeypatch, tmp_path: 
     assert not Path(user.env_file).exists()
 
 
+def test_interactive_password_must_be_confirmed(monkeypatch, tmp_path: Path, capsys):
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr(cli.sys, "stdin", type("TTY", (), {"isatty": lambda self: True})())
+    values = iter(["first-password", "different-password"])
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt: next(values))
+
+    code = cli.main(
+        [
+            "--config",
+            str(config_path),
+            "config",
+            "add",
+            "main",
+            "--username",
+            "user@example.com",
+            "--no-schedule",
+        ]
+    )
+
+    assert code == 2
+    assert "passwords do not match" in capsys.readouterr().err
+    assert not config_path.exists()
+
+
 def test_run_executes_by_default_and_dry_run_is_explicit(monkeypatch, tmp_path: Path):
     config_path = tmp_path / "config.json"
     user = UserSettings(env_file=str(tmp_path / "user.env"), profile_dir=str(tmp_path / "profile"))

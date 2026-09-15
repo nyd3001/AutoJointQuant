@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added interactive password confirmation for `config add` and new passwords in `config edit`; mismatches are rejected before any credential file is written.
+
 ## 0.1.0 - 2026-09-15
 
 - Made `nix develop` self-contained for browser-driver development by providing Node.js 22, uv, Python, and the puzzle solver dependencies, with explicit runtime paths.
