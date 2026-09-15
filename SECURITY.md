@@ -7,11 +7,11 @@ Please do not open a public issue for credential leaks, authentication bypasses,
 ## Credential handling
 
 - Never commit `.env`, passwords, cookies, tokens, or a Chrome profile.
-- Prefer `autojoinquant init`, which uses hidden password input and writes `~/.config/autojoinquant.env` with mode `0600`.
+- Prefer `autojoinquant config add <alias>`, which uses hidden password input and writes one hashed per-account credential file with mode `0600`.
 - Do not pass passwords as command arguments or source the credential file into an interactive shell. A short-lived environment or secret-manager pipe to `--password-stdin` is also supported.
 - The script intentionally does not export or print cookies, passwords, or CAPTCHA image data.
 
-The Chrome remote-debugging endpoint is bound to loopback and always uses a dedicated profile. Never point `JOINQUANT_PROFILE_DIR` at a normal daily-browser profile.
+The Chrome remote-debugging endpoint is bound to loopback and every alias uses a dedicated profile. Never replace a registry profile path with a normal daily-browser profile.
 
 ## Scope
 

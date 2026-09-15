@@ -1,7 +1,7 @@
 [project]
 name = "autojoinquant"
-version = "0.2.0"
-description = "Installable cross-platform JoinQuant daily check-in automation"
+version = "0.3.0"
+description = "Multi-account cross-platform JoinQuant daily check-in automation"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

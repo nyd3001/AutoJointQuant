@@ -10,8 +10,9 @@ import sys
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TextIO
 
-from .config import Settings, default_env_path, write_last_result
+from .config import Settings, UserSettings, write_last_result
 
 RESULT_PREFIX = "AUTOJOINQUANT_RESULT="
 
@@ -86,9 +87,7 @@ def find_node(configured: str = "") -> tuple[Path, str]:
         if version:
             rejected.append(f"{candidate} (v{version[1]})")
     detail = f"; ignored old versions: {', '.join(rejected)}" if rejected else ""
-    raise RuntimeError(
-        "Node.js 22+ was not found. Install it or set JOINQUANT_NODE_BIN" + detail
-    )
+    raise RuntimeError("Node.js 22+ was not found. Install it or set JOINQUANT_NODE_BIN" + detail)
 
 
 def automation_script() -> Path:
@@ -104,9 +103,12 @@ def automation_script() -> Path:
 
 def run_automation(
     settings: Settings,
+    alias: str,
+    user: UserSettings,
     *,
     execute: bool,
     diagnose: bool = False,
+    output: TextIO | None = None,
 ) -> int:
     node, _ = find_node(settings.node_bin)
     command = [str(node), str(automation_script())]
@@ -117,9 +119,16 @@ def run_automation(
     else:
         command.append("--dry-run")
     environment = os.environ.copy()
-    environment.setdefault("JOINQUANT_ENV_FILE", str(default_env_path()))
-    environment.setdefault("JOINQUANT_PROFILE_DIR", settings.profile_dir)
-    environment.setdefault("JOINQUANT_PYTHON", sys.executable)
+    # A named account must never inherit credentials for a different shell user.
+    environment.pop("JOINQUANT_USERNAME", None)
+    environment.pop("JOINQUANT_PASSWORD", None)
+    credential_path = Path(user.env_file).expanduser()
+    environment["JOINQUANT_ENV_FILE"] = (
+        "-" if diagnose and not credential_path.is_file() else str(credential_path)
+    )
+    environment["JOINQUANT_PROFILE_DIR"] = user.profile_dir
+    environment["JOINQUANT_PYTHON"] = sys.executable
+    environment["AUTOJOINQUANT_ALIAS"] = alias
 
     process = subprocess.Popen(
         command,
@@ -130,9 +139,10 @@ def run_automation(
         bufsize=1,
     )
     result: dict[str, object] | None = None
+    destination = output or sys.stdout
     assert process.stdout is not None
     for line in process.stdout:
-        print(line, end="")
+        print(line, end="", file=destination)
         if line.startswith(RESULT_PREFIX):
             try:
                 parsed = json.loads(line[len(RESULT_PREFIX) :])
@@ -144,7 +154,7 @@ def run_automation(
     if execute and result is not None:
         result["recordedAt"] = datetime.now(timezone.utc).isoformat()
         result["exitCode"] = return_code
-        write_last_result(result)
+        write_last_result(alias, result)
     return return_code
 
 

@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Added the installable `autojoinquant` 0.2.0 CLI with `init`, `run`, `diagnose`, `status`, and platform-native `schedule` commands.
+- Replaced the single-account interface with an alias-based multi-account registry: `config add/list/edit/remove`, `run <alias>`, `status [alias]`, and `schedule start/remove/status <alias>`.
+- Made `run <alias>` execute one check-in by default while preserving an explicit `--dry-run` inspection mode.
+- Isolated credential files, Chrome profiles, run state, logs, and scheduler identifiers for every account alias.
+- Added interactive schedule questions to `config add` and `config edit`; passwords remain hidden and are never accepted as command arguments.
+- Added the installable `autojoinquant` 0.3.0 CLI and platform-native per-account schedules.
 - Added secure 0600 credential/config files, hidden password input, runtime discovery, last-result state, and global installs through `uv tool` or `nix profile`.
 - Added launchd, systemd user timer, and cron backends with automatic macOS/Linux/NixOS selection.
 - Added structured `pointsAwarded`, `pointsAvailable`, and `pointsTotal` results; point balances are read from the credits page after Vue finishes loading.

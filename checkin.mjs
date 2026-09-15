@@ -23,7 +23,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FLOOR_URL = "https://www.joinquant.com/view/user/floor?type=mainFloor";
 const CREDITS_URL = "https://www.joinquant.com/view/user/floor?type=creditsdesc";
-const DEFAULT_ENV_FILE = join(homedir(), ".config", "autojoinquant.env");
 
 class AppError extends Error {
   constructor(message, exitCode = 1) {
@@ -40,11 +39,10 @@ function expandPath(value, base = HERE) {
 
 function loadConfigurationFile() {
   const configured = process.env.JOINQUANT_ENV_FILE;
-  if (configured === "-") return null;
-  const path = expandPath(configured || DEFAULT_ENV_FILE);
+  if (!configured || configured === "-") return null;
+  const path = expandPath(configured);
   if (!existsSync(path)) {
-    if (configured) throw new AppError(`环境变量文件不存在：${path}`);
-    return null;
+    throw new AppError(`环境变量文件不存在：${path}`);
   }
   if (process.platform !== "win32" && (statSync(path).mode & 0o077) !== 0) {
     throw new AppError(`环境变量文件权限过宽：${path}；请执行 chmod 600 '${path}'`);
