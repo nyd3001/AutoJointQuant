@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reorganized both READMEs around the mature project structure used by `remote-cli`: features, requirements, installation, configuration, command contracts, platform evidence, troubleshooting, and release guidance.
+
 ## 0.3.0 - 2026-09-15
 
 - Hid the internal `AUTOJOINQUANT_RESULT` bridge line from normal CLI output; structured data remains available through `status --json`.
