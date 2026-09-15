@@ -6,44 +6,13 @@
 
 [English README](README.en.md)
 
-AutoJointQuant 是一个可全局安装、支持多账号和定时运行的聚宽每日签到 CLI。它为每个账号维护独立的凭据、Chrome/Chromium profile、执行状态和 scheduler，通过 Chrome DevTools Protocol 完成登录、拼图求解、滑块操作与签到，全程不依赖 Computer Use。
-
-项目只执行每日签到：不会领取其他任务、浏览文章、兑换积分或修改账户设置。
-
-```text
-config add <alias> ──> 账号 registry ──> 独立凭据和 Chrome profile
-       │
-       └─> launchd / systemd / cron ──> run <alias>
-                                               │
-                                    Node.js CDP driver
-                                               │
-                              Python 拼图求解器 ──> JoinQuant
-```
-
-## 功能
-
-- 使用别名管理多个聚宽账号，账号数据彼此隔离。
-- 隐藏输入密码，凭据和配置以 `0600` 原子写入。
-- `run <alias>` 执行单次签到，`--dry-run` 不修改网站状态。
-- 自动寻找 Node.js 22+ 和 Chrome/Chromium。
-- macOS 使用 launchd；Linux/NixOS 使用 systemd user，必要时回退到 cron。
-- 返回本次获得、当前可用和累计积分，并按账号保存最后结果。
-- 提供 uv 全局安装、Nix package、开发环境和 CI。
-
-## 系统要求
-
-使用 uv 安装时需要：
-
-- Python 3.10+
-- [uv](https://docs.astral.sh/uv/)
-- Node.js 22+
-- Chrome 或 Chromium
-
-Nix package 已包含 Node.js 和 Python 图像依赖；Linux/NixOS package 还包含 Chromium。macOS Nix package 使用系统浏览器。
-
-Firefox 暂不支持，因为当前浏览器后端使用 CDP。
+AutoJointQuant 是支持多账号和定时任务的聚宽每日签到 CLI，可自动登录、完成拼图验证、签到并返回积分，不依赖 Computer Use。
+项目只执行每日签到。目前已在 macOS 实机验证；Linux/NixOS 已提供配置，但尚未实机验证。
+当前使用 Chrome/Chromium，暂不支持 Firefox。
 
 ## 安装
+
+uv 安装需要 Python 3.10+、uv、Node.js 22+ 和 Chrome/Chromium。
 
 从当前 checkout 全局安装：
 
@@ -233,56 +202,6 @@ autojoinquant schedule remove main
 
 macOS/cron 日志在 `~/.local/state/autojoinquant/users/<hash>/`；systemd 日志使用 `journalctl --user` 查看。
 
-## 平台支持
-
-| 平台 | 浏览器 | Scheduler | 当前证据 |
-| --- | --- | --- | --- |
-| macOS | 系统 Chrome/Chromium | launchd | 登录、拼图、真实签到和积分已实机验证 |
-| Linux 桌面 | Chrome/Chromium | systemd user / cron | CI、测试和打包通过；真实签到待验证 |
-| Linux/NixOS 无桌面 | 自动 headless Chromium | systemd user / cron | 尚未实机验证 |
-
-NixOS CLI-only 主机通常需要启用 user lingering：
-
-```nix
-users.users.<用户名>.linger = true;
-```
-
-不使用项目 Nix package 时，可安装系统 Chromium：
-
-```nix
-environment.systemPackages = with pkgs; [ chromium ];
-```
-
-## 故障排查
-
-1. 运行 `autojoinquant status <alias>`，先确认 Node、浏览器、求解器、凭据和 timer。
-2. Node 不可用时安装 Node.js 22+，或设置 `JOINQUANT_NODE_BIN`。
-3. 浏览器未发现时安装 Chrome/Chromium，或设置 `JOINQUANT_CHROME_BIN`。
-4. 首次运行使用 `autojoinquant run <alias> --dry-run` 检查页面和登录状态。
-5. 验证码或页面 DOM 变化时，程序会停止，不会切换到 Computer Use 或无限重试。
-6. 退出码 `4` 表示签到状态已确认但积分不完整；不要自动重试，以免重复外部操作。
-7. NixOS 用户 timer 在注销后不运行时，检查 user lingering 和 `systemctl --user status`。
-
-常用运行时覆盖项：
-
-| 变量 | 作用 |
-| --- | --- |
-| `AUTOJOINQUANT_CONFIG` | 使用其他 registry |
-| `JOINQUANT_NODE_BIN` | 指定 Node.js 22+ |
-| `JOINQUANT_CHROME_BIN` | 指定 Chrome/Chromium |
-| `JOINQUANT_HEADLESS` | `1` 强制无头，`0` 强制有界面 |
-| `JOINQUANT_TIMEOUT_MS` | 页面、CDP 和求解器超时 |
-
-## 退出码
-
-| 代码 | 含义 |
-| --- | --- |
-| `0` | 环境检查/预演成功，或签到和积分均已确认 |
-| `1` | 浏览器、运行时或普通自动化错误 |
-| `2` | CLI 配置错误，或登录凭据缺失 |
-| `3` | 登录、验证码、点击或成功证据失败 |
-| `4` | 签到状态确认，但积分读取不完整；不要自动重试 |
-
 ## 卸载
 
 先删除每个账号的 timer，再卸载程序：
@@ -294,23 +213,5 @@ uv tool uninstall autojoinquant
 ```
 
 Nix 安装可用 `nix profile list` 找到条目后执行 `nix profile remove <name>`。卸载命令不会删除 `~/.config/autojoinquant`、浏览器 profile 或历史结果。
-
-## 开发与发布
-
-```bash
-uv sync --locked
-uv run pytest
-uv run ruff check .
-/path/to/node-22-or-newer --check checkin.mjs
-
-# 完整 Nix 环境和检查
-nix develop
-nix develop --command node --version
-nix flake check
-```
-
-CI 在 macOS 和 Ubuntu 上执行 Python 测试、Ruff、Node 语法检查和包构建。真实签到会修改外部账号状态，因此不会在 CI 中运行。
-
-发布新版本时应同步 `pyproject.toml`、`package.json`、`src/autojoinquant/__init__.py` 和 `uv.lock`，将变更从 CHANGELOG 的 `Unreleased` 固化到版本号，再创建 annotated Git tag。
 
 当前版本：`v0.3.0`。运行 `autojoinquant --version` 查看已安装版本；版本历史见 [CHANGELOG.md](CHANGELOG.md)。安全策略见 [SECURITY.md](SECURITY.md)，贡献指南见 [CONTRIBUTING.md](CONTRIBUTING.md)。项目使用 [MIT License](LICENSE)。
