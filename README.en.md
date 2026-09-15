@@ -1,14 +1,8 @@
-<div align="center">
-  <h1>AutoJointQuant</h1>
-  <p>Automated multi-account JoinQuant check-in with scheduling, puzzle solving, and point reporting—without Computer Use.</p>
-  <p><strong>macOS:</strong> verified · <strong>Linux/NixOS:</strong> pending · <strong>Browser:</strong> Chrome/Chromium</p>
-  <p>
-    <a href="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml/badge.svg"></a>
-    <a href="CHANGELOG.md"><img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-blue.svg"></a>
-    <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
-  </p>
-  <p><a href="README.md">中文</a></p>
-</div>
+<h1 align="center">AutoJointQuant</h1>
+<p align="center">Automated multi-account JoinQuant check-in with scheduling, puzzle solving, and point reporting—without Computer Use.</p>
+<p align="center"><strong>macOS:</strong> verified · <strong>Linux/NixOS:</strong> pending · <strong>Browser:</strong> Chrome/Chromium</p>
+<p align="center"><a href="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml">CI</a> · <a href="CHANGELOG.md">v0.3.0</a> · <a href="LICENSE">MIT</a></p>
+<p align="center"><a href="README.md">中文</a></p>
 
 ## Installation
 
@@ -73,7 +67,3 @@ uv tool uninstall autojoinquant
 ```
 
 Uninstalling does not remove account data or result history.
-
-<div align="center">
-  <a href="CHANGELOG.md">Changelog</a> · <a href="SECURITY.md">Security</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a>
-</div>

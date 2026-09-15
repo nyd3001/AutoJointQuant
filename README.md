@@ -1,14 +1,8 @@
-<div align="center">
-  <h1>AutoJointQuant</h1>
-  <p>聚宽多账号自动签到：支持定时任务、拼图验证和积分回显，不依赖 Computer Use。</p>
-  <p><strong>macOS：</strong>已验证 · <strong>Linux/NixOS：</strong>待验证 · <strong>浏览器：</strong>Chrome/Chromium</p>
-  <p>
-    <a href="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml/badge.svg"></a>
-    <a href="CHANGELOG.md"><img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-blue.svg"></a>
-    <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
-  </p>
-  <p><a href="README.en.md">English</a></p>
-</div>
+<h1 align="center">AutoJointQuant</h1>
+<p align="center">聚宽多账号自动签到：支持定时任务、拼图验证和积分回显，不依赖 Computer Use。</p>
+<p align="center"><strong>macOS：</strong>已验证 · <strong>Linux/NixOS：</strong>待验证 · <strong>浏览器：</strong>Chrome/Chromium</p>
+<p align="center"><a href="https://github.com/nyd3001/AutoJointQuant/actions/workflows/ci.yml">CI</a> · <a href="CHANGELOG.md">v0.3.0</a> · <a href="LICENSE">MIT</a></p>
+<p align="center"><a href="README.en.md">English</a></p>
 
 ## 安装
 
@@ -73,7 +67,3 @@ uv tool uninstall autojoinquant
 ```
 
 卸载不会删除账号数据和历史结果。
-
-<div align="center">
-  <a href="CHANGELOG.md">Changelog</a> · <a href="SECURITY.md">Security</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="LICENSE">MIT License</a>
-</div>
