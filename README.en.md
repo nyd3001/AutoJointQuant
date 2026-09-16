@@ -1,6 +1,6 @@
 <h1 align="center">AutoJointQuant</h1>
 <p align="center">Automated multi-account JoinQuant check-in with scheduling, puzzle solving, and point reporting—without Computer Use.</p>
-<p align="center"><strong>macOS:</strong> verified · <strong>Linux/NixOS:</strong> pending · <strong>Browser:</strong> Chrome/Chromium</p>
+<p align="center"><strong>Verified:</strong> macOS · Linux · NixOS · <strong>Browser:</strong> Chrome/Chromium</p>
 <p align="center"><a href="README.md">中文</a></p>
 
 ## Installation
