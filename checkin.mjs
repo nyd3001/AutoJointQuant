@@ -735,6 +735,24 @@ async function solveCaptcha(cdp, { move = true } = {}) {
   return { parsed: true };
 }
 
+async function clickSignButton(cdp) {
+  return evaluate(cdp, `(() => {
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return style.visibility !== "hidden" && style.display !== "none" && box.width > 0 && box.height > 0;
+    };
+    const button = [...document.querySelectorAll("button, [role=button], a")].find((item) => {
+      const label = (item.innerText || "").trim();
+      return visible(item) && /签到/.test(label) && !/今日已签到|已签到/.test(label)
+        && !item.disabled && item.getAttribute("aria-disabled") !== "true";
+    });
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+}
+
 async function performCheckin(cdp) {
   let before = await pageState(cdp);
   if (before.alreadyCheckedIn) {
@@ -769,21 +787,7 @@ async function performCheckin(cdp) {
   if (!before.signButton) {
     throw new AppError("返回签到页后未发现可用签到按钮", 3);
   }
-  const clicked = await evaluate(cdp, `(() => {
-    const visible = (element) => {
-      const style = getComputedStyle(element);
-      const box = element.getBoundingClientRect();
-      return style.visibility !== "hidden" && style.display !== "none" && box.width > 0 && box.height > 0;
-    };
-    const button = [...document.querySelectorAll("button, [role=button], a")].find((item) => {
-      const label = (item.innerText || "").trim();
-      return visible(item) && /签到/.test(label) && !/今日已签到|已签到/.test(label)
-        && !item.disabled && item.getAttribute("aria-disabled") !== "true";
-    });
-    if (!button) return false;
-    button.click();
-    return true;
-  })()`);
+  const clicked = await clickSignButton(cdp);
   if (!clicked) throw new AppError("签到按钮在点击前消失或不可用", 3);
   await sleep(500);
   if (await evaluate(cdp, `Boolean(document.querySelector("#yth_captchar"))`)) await solveCaptcha(cdp);
@@ -906,6 +910,33 @@ async function main() {
       if (state.isLoginPage) throw new AppError("登录未完成", 3);
     }
     if (!CONFIG.execute) {
+      // A logged-in session shows the puzzle only after the sign-in button is
+      // clicked.  Dry-run starts that flow, then stops before slider movement.
+      if (!state.alreadyCheckedIn && state.signButton) {
+        if (!state.captcha) {
+          info("预演：点击签到按钮以打开拼图验证；不会拖动滑块或提交签到");
+          if (!await clickSignButton(cdp)) {
+            throw new AppError("预演时未能点击签到按钮", 3);
+          }
+          const captchaOpened = await waitFor(
+            cdp,
+            `Boolean(document.querySelector("#yth_captchar"))`,
+            CONFIG.timeoutMs,
+          );
+          if (!captchaOpened) {
+            throw new AppError("预演点击签到后未出现拼图验证，已停止以避免执行签到", 3);
+          }
+        }
+        await solveCaptcha(cdp, { move: false });
+        emitResult({
+          status: "dry-run-captcha-parsed",
+          captchaParsed: true,
+          pointsAwarded: null,
+          pointsAvailable: state.pointsAvailable,
+          pointsTotal: state.pointsTotal,
+        });
+        return;
+      }
       const checkin = state.alreadyCheckedIn ? "今日已签到" : state.signButton ? "可签到" : "未识别";
       info(`预演结果：签到状态=${checkin}，验证码=${state.captcha ? "出现" : "未出现"}`);
       const balances = state.isLoginPage ? state : await readPoints(cdp, state);
