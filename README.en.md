@@ -51,6 +51,8 @@ autojoinquant schedule remove main
 
 Run `--dry-run` before first use or after environment changes. Use `autojoinquant <command> --help` for all options.
 
+For slow pages, increase the wait: `JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 autojoinquant run main --dry-run`
+
 ## Uninstall
 
 ### Nix

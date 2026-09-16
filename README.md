@@ -51,6 +51,8 @@ autojoinquant schedule remove main
 
 首次使用或环境变化后先执行 `--dry-run`；完整参数使用 `autojoinquant <command> --help` 查看。
 
+页面加载较慢时可调整等待时间：`JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 autojoinquant run main --dry-run`
+
 ## 卸载
 
 ### Nix

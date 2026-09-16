@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 - 2026-09-16
+
+- Added bounded page-readiness waiting with a configurable `JOINQUANT_PAGE_READY_TIMEOUT_MS`; timeout errors now mention slow networks and the retry setting.
+
 ## 0.1.1 - 2026-09-16
 
 - Added interactive password confirmation for `config add` and new passwords in `config edit`; mismatches are rejected before any credential file is written.

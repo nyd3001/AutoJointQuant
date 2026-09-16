@@ -150,6 +150,7 @@ function buildConfig(envFile) {
       throw new AppError("JOINQUANT_DEBUG_PORT 必须是 auto 或 1-65535 的端口号");
     }
   }
+  const timeoutMs = positiveInteger(process.env.JOINQUANT_TIMEOUT_MS, "JOINQUANT_TIMEOUT_MS", 15000);
   return {
     chrome: discoverChrome(),
     debugPort,
@@ -162,7 +163,12 @@ function buildConfig(envFile) {
     profile: validateDedicatedProfile(
       expandPath(process.env.JOINQUANT_PROFILE_DIR || join(HERE, ".chrome-profile")),
     ),
-    timeoutMs: positiveInteger(process.env.JOINQUANT_TIMEOUT_MS, "JOINQUANT_TIMEOUT_MS", 15000),
+    timeoutMs,
+    pageReadyTimeoutMs: positiveInteger(
+      process.env.JOINQUANT_PAGE_READY_TIMEOUT_MS,
+      "JOINQUANT_PAGE_READY_TIMEOUT_MS",
+      Math.max(timeoutMs, 60000),
+    ),
     username: process.env.JOINQUANT_USERNAME || "",
   };
 }
@@ -578,6 +584,35 @@ async function waitFor(cdp, predicate, timeoutMs = 15000) {
   return null;
 }
 
+function pageReadyTimeoutMs() {
+  return CONFIG.pageReadyTimeoutMs;
+}
+
+async function waitForRelevantPage(cdp) {
+  const ready = await waitFor(cdp, `(() => {
+    const text = document.body?.innerText || "";
+    const passwordInput = document.querySelector('input[type="password"]');
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return style.visibility !== "hidden" && style.display !== "none" && box.width > 0 && box.height > 0;
+    };
+    const signButton = [...document.querySelectorAll("button, [role=button], a")]
+      .some((item) => visible(item) && /签到/.test((item.innerText || "").trim()));
+    const loginPage = location.pathname.includes("/user/login") || Boolean(passwordInput);
+    const knownFloor = /今日已签到|签到领积分|积分中心|累计获得[\\s\\S]*积分/.test(text);
+    return loginPage || signButton || knownFloor || Boolean(document.querySelector("#yth_captchar"));
+  })()`, pageReadyTimeoutMs());
+  if (!ready) {
+    const seconds = Math.ceil(CONFIG.pageReadyTimeoutMs / 1000);
+    throw new AppError(
+      `等待 JoinQuant 页面内容超时（${seconds} 秒）；可能是网络较慢或远端页面仍在加载。可设置 JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 后重试`,
+      3,
+    );
+  }
+  return pageState(cdp);
+}
+
 async function fillLogin(cdp, { moveCaptcha = true } = {}) {
   if (!CONFIG.username || !CONFIG.password) {
     throw new AppError(
@@ -594,7 +629,7 @@ async function fillLogin(cdp, { moveCaptcha = true } = {}) {
     const hasButton = Boolean(document.querySelector("button.btnPwdSubmit, button[type=submit], input[type=submit]"))
       || [...document.querySelectorAll("button, a")].some((item) => /登\s*录/.test(item.innerText || ""));
     return hasUser && hasPassword && hasButton;
-  })()`, 10000);
+  })()`, pageReadyTimeoutMs());
   if (!controlsReady) throw new AppError("等待后仍未找到登录控件", 3);
   const result = await evaluate(cdp, `(() => {
     const find = (selectors) => selectors.map((selector) => document.querySelector(selector)).find(Boolean);
@@ -621,13 +656,13 @@ async function fillLogin(cdp, { moveCaptcha = true } = {}) {
   const captchaOrNavigation = await waitFor(
     cdp,
     `Boolean(document.querySelector("#yth_captchar")) || !location.pathname.includes("/user/login")`,
-    CONFIG.timeoutMs,
+    pageReadyTimeoutMs(),
   );
   const captchaVisible = await evaluate(cdp, `Boolean(document.querySelector("#yth_captchar"))`);
   if (captchaVisible) {
     await solveCaptcha(cdp, { move: moveCaptcha });
     if (moveCaptcha) {
-      await waitFor(cdp, `!location.pathname.includes("/user/login")`, CONFIG.timeoutMs);
+      await waitFor(cdp, `!location.pathname.includes("/user/login")`, pageReadyTimeoutMs());
     }
   }
   return {
@@ -873,7 +908,7 @@ function diagnose() {
     : `uv: ${resolveExecutable(process.env.JOINQUANT_UV || "uv") || "未发现"}`;
   info(`平台=${process.platform}/${process.arch}，Node=${process.versions.node}`);
   info(`浏览器=${browser}`);
-  info(`profile=${CONFIG.profile}，调试端口=${CONFIG.debugPort}，headless=${CONFIG.headless}`);
+  info(`profile=${CONFIG.profile}，调试端口=${CONFIG.debugPort}，headless=${CONFIG.headless}，页面等待=${CONFIG.pageReadyTimeoutMs}ms`);
   info(`环境变量文件=${CONFIG.envFile || "未加载"}，登录凭据=${credentials}，求解器运行时=${pythonRunner}`);
   if (browser === "未发现") throw new AppError(browserInstallHint());
   if (pythonRunner.endsWith("未发现")) {
@@ -889,7 +924,7 @@ async function main() {
     await ensureChrome();
     cdp = await openPage();
     await navigate(cdp, FLOOR_URL);
-    let state = await pageState(cdp);
+    let state = await waitForRelevantPage(cdp);
     info(`页面已打开：${state.isLoginPage ? "需要登录" : "已登录"}`);
     if (state.isLoginPage) {
       const login = await fillLogin(cdp, { moveCaptcha: CONFIG.execute });
@@ -904,9 +939,9 @@ async function main() {
         return;
       }
       if (!login.loginCompleted) {
-        await waitFor(cdp, `!location.pathname.includes("/user/login")`, CONFIG.timeoutMs);
+        await waitFor(cdp, `!location.pathname.includes("/user/login")`, pageReadyTimeoutMs());
       }
-      state = await pageState(cdp);
+      state = await waitForRelevantPage(cdp);
       if (state.isLoginPage) throw new AppError("登录未完成", 3);
     }
     if (!CONFIG.execute) {

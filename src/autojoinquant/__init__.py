@@ -1,3 +1,3 @@
 """Installable command-line interface for AutoJointQuant."""
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
