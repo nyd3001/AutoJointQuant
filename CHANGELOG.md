@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 - 2026-09-16
 
 - Added interactive password confirmation for `config add` and new passwords in `config edit`; mismatches are rejected before any credential file is written.
 - Changed `run <alias> --dry-run` to open the sign-in puzzle, parse it, and stop before slider movement or check-in.
