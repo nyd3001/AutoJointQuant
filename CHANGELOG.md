@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 - 2026-09-16
+
+- Waited for the rendered slider geometry before dragging and report a configurable page-load timeout instead of failing immediately.
+
 ## 0.1.3 - 2026-09-16
 
 - Extended the CAPTCHA solver timeout to use the bounded page-readiness window, avoiding false failures during cold starts.

@@ -732,15 +732,22 @@ function runSolver(captcha) {
 }
 
 async function dragCaptcha(cdp, gapX) {
-  const geometry = await evaluate(cdp, `(() => {
+  const geometry = await waitFor(cdp, `(() => {
     const track = document.querySelector("#drag");
     const handle = document.querySelector("#drag .handler");
     if (!track || !handle) return null;
     const t = track.getBoundingClientRect();
     const h = handle.getBoundingClientRect();
+    if (t.width <= 0 || t.height <= 0 || h.width <= 0 || h.height <= 0) return null;
     return { track: { left: t.left, top: t.top, width: t.width, height: t.height }, handle: { left: h.left, top: h.top, width: h.width, height: h.height } };
-  })()`);
-  if (!geometry) throw new AppError("未找到验证码滑块位置", 3);
+  })()`, pageReadyTimeoutMs());
+  if (!geometry) {
+    const seconds = Math.ceil(CONFIG.pageReadyTimeoutMs / 1000);
+    throw new AppError(
+      `等待验证码滑块加载超时（${seconds} 秒）；可能是网络较慢或页面仍在渲染。可设置 JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 后重试`,
+      3,
+    );
+  }
   const maxOffset = Math.max(0, geometry.track.width - geometry.handle.width);
   const offset = Math.min(Math.max(gapX, 0), maxOffset);
   const startX = geometry.handle.left + geometry.handle.width / 2;
