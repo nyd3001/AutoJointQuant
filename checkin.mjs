@@ -578,7 +578,7 @@ async function waitFor(cdp, predicate, timeoutMs = 15000) {
   return null;
 }
 
-async function fillLogin(cdp) {
+async function fillLogin(cdp, { moveCaptcha = true } = {}) {
   if (!CONFIG.username || !CONFIG.password) {
     throw new AppError(
       "当前未登录；请设置 JOINQUANT_USERNAME 和 JOINQUANT_PASSWORD，或使用受保护的环境变量文件",
@@ -618,8 +618,22 @@ async function fillLogin(cdp) {
     return { ok: true };
   })()`);
   if (!result?.ok) throw new AppError(result?.reason || "无法填写登录表单", 3);
-  await sleep(500);
-  if (await evaluate(cdp, `Boolean(document.querySelector("#yth_captchar"))`)) await solveCaptcha(cdp);
+  const captchaOrNavigation = await waitFor(
+    cdp,
+    `Boolean(document.querySelector("#yth_captchar")) || !location.pathname.includes("/user/login")`,
+    CONFIG.timeoutMs,
+  );
+  const captchaVisible = await evaluate(cdp, `Boolean(document.querySelector("#yth_captchar"))`);
+  if (captchaVisible) {
+    await solveCaptcha(cdp, { move: moveCaptcha });
+    if (moveCaptcha) {
+      await waitFor(cdp, `!location.pathname.includes("/user/login")`, CONFIG.timeoutMs);
+    }
+  }
+  return {
+    captchaParsed: Boolean(captchaVisible),
+    loginCompleted: Boolean(captchaOrNavigation) && !captchaVisible && !await evaluate(cdp, `location.pathname.includes("/user/login")`),
+  };
 }
 
 async function captureCaptcha(cdp) {
@@ -707,13 +721,18 @@ async function dragCaptcha(cdp, gapX) {
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: startX + offset, y: startY, button: "left", buttons: 0, clickCount: 1 });
 }
 
-async function solveCaptcha(cdp) {
+async function solveCaptcha(cdp, { move = true } = {}) {
   const captcha = await captureCaptcha(cdp);
   const gapX = runSolver(captcha);
+  if (!move) {
+    info(`验证码缺口已由脚本计算（x=${gapX}），预演不会移动滑块`);
+    return { parsed: true };
+  }
   info(`验证码缺口已由脚本计算（x=${gapX}），开始自动拖动验证`);
   await dragCaptcha(cdp, gapX);
   const result = await waitFor(cdp, `!document.querySelector("#yth_captchar")`, 8000);
   if (!result) throw new AppError("自动拖动后验证码仍未消失", 3);
+  return { parsed: true };
 }
 
 async function performCheckin(cdp) {
@@ -801,10 +820,14 @@ async function performCheckin(cdp) {
 }
 
 function emitResult(result) {
-  const display = (value) => Number.isFinite(value) ? String(value) : "未识别";
-  info(
-    `积分结果：本次=${display(result.pointsAwarded)}，可用=${display(result.pointsAvailable)}，累计=${display(result.pointsTotal)}`,
-  );
+  if (result.status === "dry-run-captcha-parsed") {
+    info("拼图解析成功，未移动滑块；预演结束，不执行签到");
+  } else {
+    const display = (value) => Number.isFinite(value) ? String(value) : "未识别";
+    info(
+      `积分结果：本次=${display(result.pointsAwarded)}，可用=${display(result.pointsAvailable)}，累计=${display(result.pointsTotal)}`,
+    );
+  }
   process.stdout.write(`AUTOJOINQUANT_RESULT=${JSON.stringify(result)}\n`);
 }
 
@@ -817,7 +840,7 @@ Usage:
   node checkin.mjs --diagnose
 
 Options:
-  --dry-run   Inspect page state only (default)
+  --dry-run   Fill login, parse CAPTCHA, and stop before slider/check-in
   --execute   Log in if needed and perform today's check-in
   --diagnose  Validate local configuration without opening a browser
   --help      Show this help
@@ -865,18 +888,20 @@ async function main() {
     let state = await pageState(cdp);
     info(`页面已打开：${state.isLoginPage ? "需要登录" : "已登录"}`);
     if (state.isLoginPage) {
-      if (!CONFIG.execute) {
-        info("预演结束：不会填充密码或提交登录");
+      const login = await fillLogin(cdp, { moveCaptcha: CONFIG.execute });
+      if (!CONFIG.execute && login.captchaParsed) {
         emitResult({
-          status: "login-required",
+          status: "dry-run-captcha-parsed",
+          captchaParsed: true,
           pointsAwarded: null,
           pointsAvailable: null,
           pointsTotal: null,
         });
         return;
       }
-      await fillLogin(cdp);
-      await waitFor(cdp, `!location.pathname.includes("/user/login")`, CONFIG.timeoutMs);
+      if (!login.loginCompleted) {
+        await waitFor(cdp, `!location.pathname.includes("/user/login")`, CONFIG.timeoutMs);
+      }
       state = await pageState(cdp);
       if (state.isLoginPage) throw new AppError("登录未完成", 3);
     }

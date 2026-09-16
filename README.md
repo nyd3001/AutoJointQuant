@@ -31,8 +31,10 @@ uv 安装需要 Python 3.10+、uv、Node.js 22+ 和 Chrome/Chromium。
 # 添加账号；按提示输入用户名、确认密码和定时设置
 autojoinquant config add main
 
-# 预演、签到、查看状态
+# 登录并解析拼图（不拖动、不签到）
 autojoinquant run main --dry-run
+
+# 真实签到、查看状态
 autojoinquant run main
 autojoinquant status main
 

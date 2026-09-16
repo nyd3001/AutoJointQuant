@@ -97,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--dry-run",
         action="store_true",
-        help="inspect page state without login, CAPTCHA, or check-in",
+        help="fill login, parse CAPTCHA, and stop before slider or check-in",
     )
 
     status = commands.add_parser("status", help="check environment, accounts, timers, and results")

@@ -31,8 +31,10 @@ The uv installation requires Python 3.10+, uv, Node.js 22+, and Chrome/Chromium.
 # Add an account; confirm the password when prompted
 autojoinquant config add main
 
-# Preview, check in, and inspect status
+# Log in and parse the puzzle (no slider, no check-in)
 autojoinquant run main --dry-run
+
+# Check in and inspect status
 autojoinquant run main
 autojoinquant status main
 
