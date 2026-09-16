@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5 - 2026-09-16
+
+- Added support for JoinQuant's current `#slideVerifyDragControl` CAPTCHA track and `.valid-code__drag-handle` slider while retaining the legacy selectors.
+- Made `--dry-run` verify the complete drag path by deliberately choosing a position far from the solved gap; it never attempts to pass the CAPTCHA or check in.
+
 ## 0.1.4 - 2026-09-16
 
 - Waited for the rendered slider geometry before dragging and report a configurable page-load timeout instead of failing immediately.

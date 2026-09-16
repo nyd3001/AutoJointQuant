@@ -731,10 +731,11 @@ function runSolver(captcha) {
   }
 }
 
-async function dragCaptcha(cdp, gapX) {
+async function dragCaptcha(cdp, gapX, { intentionallyWrong = false } = {}) {
   const geometry = await waitFor(cdp, `(() => {
-    const track = document.querySelector("#drag");
-    const handle = document.querySelector("#drag .handler");
+    const track = document.querySelector("#slideVerifyDragControl, #drag, .valid-code__drag");
+    const handle = track?.querySelector(".valid-code__drag-handle, .handler")
+      || document.querySelector(".valid-code__drag-handle.handler, #drag .handler");
     if (!track || !handle) return null;
     const t = track.getBoundingClientRect();
     const h = handle.getBoundingClientRect();
@@ -749,7 +750,15 @@ async function dragCaptcha(cdp, gapX) {
     );
   }
   const maxOffset = Math.max(0, geometry.track.width - geometry.handle.width);
-  const offset = Math.min(Math.max(gapX, 0), maxOffset);
+  const solvedOffset = Math.min(Math.max(gapX, 0), maxOffset);
+  const previewCandidates = [Math.min(8, maxOffset), Math.max(0, maxOffset - 8)];
+  const previewOffset = previewCandidates.reduce((farthest, candidate) => (
+    Math.abs(candidate - solvedOffset) > Math.abs(farthest - solvedOffset) ? candidate : farthest
+  ));
+  if (intentionallyWrong && Math.abs(previewOffset - solvedOffset) < 64) {
+    throw new AppError("验证码滑轨过短，无法安全选择与求解位置相差至少 64px 的预演位置", 3);
+  }
+  const offset = intentionallyWrong ? previewOffset : solvedOffset;
   const startX = geometry.handle.left + geometry.handle.width / 2;
   const startY = geometry.handle.top + geometry.handle.height / 2;
   const steps = 48;
@@ -765,14 +774,17 @@ async function dragCaptcha(cdp, gapX) {
     await sleep(12);
   }
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: startX + offset, y: startY, button: "left", buttons: 0, clickCount: 1 });
+  return offset;
 }
 
 async function solveCaptcha(cdp, { move = true } = {}) {
   const captcha = await captureCaptcha(cdp);
   const gapX = runSolver(captcha);
   if (!move) {
-    info(`验证码缺口已由脚本计算（x=${gapX}），预演不会移动滑块`);
-    return { parsed: true };
+    info(`验证码缺口已由脚本计算（x=${gapX}）`);
+    const previewOffset = await dragCaptcha(cdp, gapX, { intentionallyWrong: true });
+    info(`预演已拖动到刻意错误的位置（x=${Math.round(previewOffset)}），与求解位置相差 ${Math.round(Math.abs(previewOffset - gapX))}px`);
+    return { parsed: true, gapX, previewOffset };
   }
   info(`验证码缺口已由脚本计算（x=${gapX}），开始自动拖动验证`);
   await dragCaptcha(cdp, gapX);
@@ -871,7 +883,7 @@ async function performCheckin(cdp) {
 
 function emitResult(result) {
   if (result.status === "dry-run-captcha-parsed") {
-    info("拼图解析成功，未移动滑块；预演结束，不执行签到");
+    info("拼图识别与滑块拖动链路已验证；未尝试通过验证码，不执行签到");
   } else {
     const display = (value) => Number.isFinite(value) ? String(value) : "未识别";
     info(
@@ -890,7 +902,7 @@ Usage:
   node checkin.mjs --diagnose
 
 Options:
-  --dry-run   Fill login, parse CAPTCHA, and stop before slider/check-in
+  --dry-run   Parse CAPTCHA, drag to an intentionally wrong position, and stop
   --execute   Log in if needed and perform today's check-in
   --diagnose  Validate local configuration without opening a browser
   --help      Show this help
@@ -957,10 +969,11 @@ async function main() {
     }
     if (!CONFIG.execute) {
       // A logged-in session shows the puzzle only after the sign-in button is
-      // clicked.  Dry-run starts that flow, then stops before slider movement.
+      // clicked. Dry-run starts that flow and deliberately misses the solved
+      // position so the drag path is tested without completing the check-in.
       if (!state.alreadyCheckedIn && state.signButton) {
         if (!state.captcha) {
-          info("预演：点击签到按钮以打开拼图验证；不会拖动滑块或提交签到");
+          info("预演：点击签到按钮以打开拼图验证；仅拖到刻意错误的位置，不提交签到");
           if (!await clickSignButton(cdp)) {
             throw new AppError("预演时未能点击签到按钮", 3);
           }
