@@ -713,7 +713,11 @@ function runSolver(captcha) {
       : { bin: process.env.JOINQUANT_UV || "uv", args: ["run", "--project", HERE, "python"] };
     const output = execFileSync(command.bin, [
       ...command.args, solver, "--response", responsePath, "--piece", piecePath,
-    ], { encoding: "utf8", timeout: CONFIG.timeoutMs, maxBuffer: 1024 * 1024 });
+    ], {
+      encoding: "utf8",
+      timeout: Math.max(CONFIG.timeoutMs, CONFIG.pageReadyTimeoutMs),
+      maxBuffer: 1024 * 1024,
+    });
     const match = output.match(/GAP_X=(\d+)/);
     if (!match) throw new AppError("验证码求解器未返回 GAP_X", 3);
     return Number(match[1]);

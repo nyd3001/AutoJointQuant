@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 - 2026-09-16
+
+- Extended the CAPTCHA solver timeout to use the bounded page-readiness window, avoiding false failures during cold starts.
+
 ## 0.1.2 - 2026-09-16
 
 - Added bounded page-readiness waiting with a configurable `JOINQUANT_PAGE_READY_TIMEOUT_MS`; timeout errors now mention slow networks and the retry setting.
