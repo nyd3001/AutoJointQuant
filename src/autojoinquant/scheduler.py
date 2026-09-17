@@ -138,7 +138,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart={command}
-TimeoutStartSec=180
+TimeoutStartSec=900
 """
 
 

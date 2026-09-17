@@ -24,6 +24,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FLOOR_URL = "https://www.joinquant.com/view/user/floor?type=mainFloor";
 const CREDITS_URL = "https://www.joinquant.com/view/user/floor?type=creditsdesc";
+const COMMUNITY_URL = "https://www.joinquant.com/view/community/list?listType=1";
 
 class AppError extends Error {
   constructor(message, exitCode = 1) {
@@ -152,7 +153,12 @@ function buildConfig(envFile) {
     }
   }
   const timeoutMs = positiveInteger(process.env.JOINQUANT_TIMEOUT_MS, "JOINQUANT_TIMEOUT_MS", 15000);
+  const readingMinMs = positiveInteger(process.env.JOINQUANT_READING_MIN_MS, "JOINQUANT_READING_MIN_MS", 45000);
+  const readingMaxMs = positiveInteger(process.env.JOINQUANT_READING_MAX_MS, "JOINQUANT_READING_MAX_MS", 90000);
+  if (readingMinMs > readingMaxMs) throw new AppError("JOINQUANT_READING_MIN_MS 不能大于 JOINQUANT_READING_MAX_MS");
   return {
+    readingMinMs,
+    readingMaxMs,
     chrome: discoverChrome(),
     debugPort,
     envFile,
@@ -945,7 +951,206 @@ async function performCheckin(cdp) {
   };
 }
 
+// These helpers are also used in offline tests. No article URL is hard-coded.
+export function chooseReadingPlan(titles, previousTitle, minMs, maxMs, random = Math.random) {
+  if (![minMs, maxMs].every((ms) => Number.isSafeInteger(ms) && ms > 0) || minMs > maxMs) {
+    throw new AppError("文章停留时间必须是有效的正整数区间");
+  }
+  const unique = [...new Set(titles.filter((title) => typeof title === "string" && title.trim()))];
+  const fresh = unique.filter((title) => title !== previousTitle);
+  const candidates = fresh.length ? fresh : unique;
+  if (!candidates.length) throw new AppError("社区列表没有可用文章；请检查网络或页面结构", 3);
+  const draw = () => Math.min(1 - Number.EPSILON, Math.max(0, random()));
+  return {
+    articleTitle: candidates[Math.floor(draw() * candidates.length)],
+    dwellMs: minMs + Math.floor(draw() * (maxMs - minMs + 1)),
+  };
+}
+
+export function isCommunityArticle(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin === "https://www.joinquant.com"
+      && /^\/(?:post|view\/community\/detail)\/[a-zA-Z0-9]+\/?$/.test(parsed.pathname);
+  } catch { return false; }
+}
+
+// Operate only on the named reading card, never a global "claim" button.
+export function readingTask(action = false) {
+  const card = [...document.querySelectorAll(".floor-credit-card")].find((element) =>
+    element.querySelector(".header-title")?.textContent.trim() === "浏览社区文章");
+  if (!card) return { status: "unknown" };
+  const buttons = [...card.querySelectorAll("button")];
+  const claim = buttons.find((button) => /^(立即领取|领取)$/.test(button.textContent.trim())
+    && !button.disabled && button.getAttribute("aria-disabled") !== "true");
+  const reward = card.querySelector(".el-card__header")?.textContent.match(/\+\s*(\d+)/);
+  const text = card.textContent;
+  const status = claim ? "claimable"
+    : /(?:已达|达到|超过).*上限|本月.*(?:已满|用完)/.test(text) ? "monthly-limit"
+    : buttons.some((button) => /已领取|已完成/.test(button.textContent)) ? "completed"
+    : buttons.some((button) => /去看看/.test(button.textContent)) ? "available" : "unknown";
+  if (action && claim) claim.click();
+  return { status, reward: reward ? Number(reward[1]) : null, clicked: Boolean(action && claim) };
+}
+
+async function readingSnapshot(cdp, reload = false) {
+  if (reload) {
+    await navigate(cdp, CREDITS_URL);
+    if (!await waitFor(cdp, `(${readingTask.toString()})().status !== "unknown"`, pageReadyTimeoutMs())) {
+      throw new AppError("浏览积分任务加载超时；请检查网络或增大 JOINQUANT_PAGE_READY_TIMEOUT_MS", 3);
+    }
+    await sleep(2000); // Wait for Vue's balance placeholders to settle.
+  }
+  return { ...await pageState(cdp), task: await evaluate(cdp, `(${readingTask.toString()})()`) };
+}
+
+async function browseCommunityArticle(cdp, previousTitle) {
+  await navigate(cdp, COMMUNITY_URL);
+  const selector = ".jq-c-list_community__text";
+  const titles = await waitFor(cdp, `(() => {
+    const titles = [...document.querySelectorAll(${JSON.stringify(selector)})]
+      .filter(el => el.getBoundingClientRect().width > 0).map(el => el.textContent.trim());
+    return titles.length ? titles : null;
+  })()`, pageReadyTimeoutMs());
+  const plan = chooseReadingPlan(titles || [], previousTitle, CONFIG.readingMinMs, CONFIG.readingMaxMs);
+  const { targetInfo: opener } = await cdp.send("Target.getTargetInfo");
+  const { targetInfos: existing } = await cdp.send("Target.getTargets");
+  const known = new Set(existing.map((target) => target.targetId));
+  await pauseBeforeAction();
+  const clicked = await evaluate(cdp, `(() => {
+    const el = [...document.querySelectorAll(${JSON.stringify(selector)})]
+      .find(el => el.textContent.trim() === ${JSON.stringify(plan.articleTitle)});
+    if (!el) return false;
+    el.click(); return true;
+  })()`);
+  if (!clicked) throw new AppError("选中的文章已从列表消失；已停止，不另选文章重试", 3);
+  let article = cdp;
+  let targetId = null;
+  try {
+    const deadline = Date.now() + pageReadyTimeoutMs();
+    let url = null;
+    while (Date.now() < deadline) {
+      const { targetInfos } = await cdp.send("Target.getTargets");
+      const target = targetInfos.find((item) => item.type === "page" && isCommunityArticle(item.url)
+        && (item.targetId === opener.targetId || (!known.has(item.targetId) && item.openerId === opener.targetId)));
+      if (target) {
+        url = target.url;
+        if (target.targetId !== opener.targetId) {
+          targetId = target.targetId;
+          const targets = await jsonFetch(`http://127.0.0.1:${ACTIVE_PORT}/json/list`);
+          const socket = targets.find((item) => item.id === targetId)?.webSocketDebuggerUrl;
+          if (!socket) throw new AppError("文章新标签页不可连接", 3);
+          article = new CdpClient(socket);
+          await article.send("Page.enable");
+          await article.send("Runtime.enable");
+        }
+        break;
+      }
+      await sleep(300);
+    }
+    if (!url) throw new AppError("文章打开超时；可能是网络或弹窗被阻止，已停止", 3);
+    const loaded = await waitFor(article, `(() => {
+      const title = document.querySelector('.jq-m-community__title')?.textContent.trim();
+      const content = document.querySelector('.jq-c-markdown-render-html')?.textContent.trim();
+      return title === ${JSON.stringify(plan.articleTitle)} && Boolean(content);
+    })()`, pageReadyTimeoutMs());
+    if (!loaded) throw new AppError("文章正文加载超时；未计入停留时长", 3);
+    info(`浏览社区文章：${plan.articleTitle}；计划停留 ${(plan.dwellMs / 1000).toFixed(1)} 秒`);
+    await article.send("Page.bringToFront");
+    await sleep(plan.dwellMs);
+    const state = await pageState(article);
+    if (state.isLoginPage || !isCommunityArticle(state.url)) throw new AppError("文章浏览期间页面发生跳转", 3);
+    return { ...plan, articleUrl: url };
+  } finally {
+    if (article !== cdp) article.close();
+    if (targetId) await cdp.send("Target.closeTarget", { targetId }).catch(() => {});
+  }
+}
+
+export async function performCommunityReading(cdp, {
+  dryRun = false, previous = {}, timeoutMs = pageReadyTimeoutMs(),
+  date = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }),
+  snapshot = readingSnapshot, browse = browseCommunityArticle,
+  claim = async (page) => {
+    await pauseBeforeAction();
+    return (await evaluate(page, `(${readingTask.toString()})(true)`)).clicked;
+  },
+  solve = solveCaptcha, pause = sleep, now = Date.now,
+} = {}) {
+  if (dryRun) return { status: "skipped-dry-run", pointsAwarded: 0 };
+  let state = await snapshot(cdp, true);
+  const baseline = state.pointsTotal;
+  const finish = (status, pointsAwarded, evidence = {}) => ({
+    status, pointsAwarded, pointsAvailable: state.pointsAvailable, pointsTotal: state.pointsTotal,
+    ...evidence,
+  });
+  if (!Number.isFinite(baseline) || !Number.isFinite(state.pointsAvailable)) {
+    throw new AppError("浏览任务开始前无法读取积分，已停止", 4);
+  }
+  if (state.task.status === "monthly-limit") return finish("monthly-limit", 0);
+  if (state.task.status === "completed"
+    || (previous.date === date && ["claimed", "already-completed"].includes(previous.status))) {
+    return finish("already-completed", 0, { date, articleTitle: previous.articleTitle });
+  }
+  let evidence = {};
+  if (state.task.status === "available") {
+    evidence = await browse(cdp, previous.articleTitle);
+    const deadline = now() + timeoutMs;
+    do {
+      state = await snapshot(cdp, true);
+      if (state.task.status !== "available") break;
+      await pause(1000);
+    } while (now() < deadline);
+  }
+  if (state.task.status === "monthly-limit") return finish("monthly-limit", 0, evidence);
+  if (state.task.status !== "claimable") return finish("unconfirmed", null, evidence);
+  const reward = state.task.reward;
+  if (!Number.isFinite(reward) || reward <= 0) return finish("unconfirmed", null, evidence);
+  if (!await claim(cdp)) throw new AppError("浏览奖励领取按钮不可用；没有重试", 3);
+  let solved = false;
+  let deadline = now() + timeoutMs;
+  while (now() < deadline) {
+    state = await snapshot(cdp);
+    if (state.failure || state.isLoginPage) throw new AppError("浏览奖励领取被拒绝或登录失效；没有重试", 3);
+    if (state.captcha && !solved) {
+      solved = true; // At most one correct drag; do not retry on rejection.
+      await solve(cdp);
+      deadline = now() + timeoutMs;
+    } else if (!state.captcha && state.task.status !== "claimable") {
+      // Re-read server-rendered balances; a disappearing CAPTCHA alone is not success.
+      state = await snapshot(cdp, true);
+      if (Number.isFinite(state.pointsTotal) && Number.isFinite(state.pointsAvailable)
+        && state.pointsTotal - baseline === reward
+        && ["available", "completed", "monthly-limit"].includes(state.task.status)) {
+        return finish("claimed", reward, { ...evidence, date });
+      }
+    }
+    await pause(300);
+  }
+  return finish("unconfirmed", null, evidence);
+}
+
+export function combineDailyResults(checkin, reading) {
+  const complete = ["claimed", "already-completed", "monthly-limit"].includes(reading.status)
+    && [checkin.pointsAwarded, reading.pointsAwarded, reading.pointsAvailable,
+      reading.pointsTotal].every(Number.isFinite);
+  return {
+    status: complete ? "completed" : "partial",
+    checkin, reading,
+    pointsAwarded: [checkin.pointsAwarded, reading.pointsAwarded].every(Number.isFinite)
+      ? checkin.pointsAwarded + reading.pointsAwarded : null,
+    pointsAvailable: reading.pointsAvailable ?? null,
+    pointsTotal: reading.pointsTotal ?? null,
+  };
+}
+
 function emitResult(result) {
+  if (result.reading) {
+    const labels = { claimed: "已领取", "already-completed": "今日已完成", "monthly-limit": "本月已达上限",
+      unconfirmed: "未确认领取成功（不自动重试）", failed: "失败（不自动重试）" };
+    info(`浏览任务：${labels[result.reading.status] || result.reading.status}`);
+    info(`分项积分：签到=${result.checkin.pointsAwarded ?? "未识别"}，浏览=${result.reading.pointsAwarded ?? "未识别"}`);
+  }
   if (result.status === "dry-run-captcha-parsed") {
     const stage = result.captchaStage === "login" ? "登录拼图（尚未进入签到阶段）" : "签到拼图";
     info(`预演阶段：${stage}；已按偏离求解位置的方式拖动，流程已停止`);
@@ -968,7 +1173,7 @@ Usage:
 
 Options:
   --dry-run   Parse CAPTCHA, drag to an intentionally wrong position, and stop
-  --execute   Log in if needed and perform today's check-in
+  --execute   Log in, check in, and complete one community reading task
   --diagnose  Validate local configuration without opening a browser
   --help      Show this help
 `);
@@ -1067,12 +1272,24 @@ async function main() {
       });
       return;
     }
-    const result = await performCheckin(cdp);
-    if (result.status === "checked-in") info("签到成功证据已确认");
-    emitResult(result);
-    if (![result.pointsAwarded, result.pointsAvailable, result.pointsTotal].every(Number.isFinite)) {
+    const checkin = await performCheckin(cdp);
+    if (checkin.status === "checked-in") info("签到成功证据已确认");
+    if (![checkin.pointsAwarded, checkin.pointsAvailable, checkin.pointsTotal].every(Number.isFinite)) {
+      emitResult(checkin);
       throw new AppError("签到状态已确认，但积分数量读取不完整；请检查页面变化后再决定是否重试", 4);
     }
+    let reading;
+    try {
+      const previous = JSON.parse(process.env.AUTOJOINQUANT_PREVIOUS_READING || "{}");
+      reading = await performCommunityReading(cdp, { previous });
+    } catch (error) {
+      emitResult(combineDailyResults(checkin, { status: "failed", pointsAwarded: null }));
+      throw error;
+    }
+    const result = combineDailyResults(checkin, reading);
+    emitResult(result);
+    if (reading.status === "unconfirmed") throw new AppError("浏览积分未确认到账；签到结果已保留，请检查页面或网络，不自动重复浏览/领取", 3);
+    if (result.status === "partial") throw new AppError("任务状态已确认，但最终积分读取不完整", 4);
   } finally {
     cdp?.close();
     await closeOwnedBrowser();

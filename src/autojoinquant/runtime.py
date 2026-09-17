@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TextIO
 
-from .config import Settings, UserSettings, write_last_result
+from .config import Settings, UserSettings, read_last_result, write_last_result
 
 RESULT_PREFIX = "AUTOJOINQUANT_RESULT="
 
@@ -129,6 +129,10 @@ def run_automation(
     environment["JOINQUANT_PROFILE_DIR"] = user.profile_dir
     environment["JOINQUANT_PYTHON"] = sys.executable
     environment["AUTOJOINQUANT_ALIAS"] = alias
+    previous = read_last_result(alias) if execute and not diagnose else None
+    environment["AUTOJOINQUANT_PREVIOUS_READING"] = json.dumps(
+        (previous or {}).get("reading") or {}
+    )
 
     process = subprocess.Popen(
         command,

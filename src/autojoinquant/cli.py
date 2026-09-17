@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     remove.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     remove.add_argument("--backend", choices=BACKENDS, default=None)
 
-    run = commands.add_parser("run", help="execute one check-in for an account")
+    run = commands.add_parser("run", help="check in and complete one community reading task")
     run.add_argument("alias", help="configured account alias")
     run.add_argument(
         "--dry-run",

@@ -1,4 +1,5 @@
 import io
+import json
 from pathlib import Path
 
 from autojoinquant import runtime
@@ -77,3 +78,33 @@ def test_missing_internal_result_changes_false_success_to_failure(tmp_path: Path
 
     assert code == 1
     assert "内部结果缺失" in output.getvalue()
+
+
+def test_reading_history_is_account_scoped_and_dry_run_never_writes(tmp_path, monkeypatch):
+    previous = {"status": "claimed", "date": "2026-09-17", "articleTitle": "previous"}
+    saved = []
+    environments = []
+    monkeypatch.setattr(runtime, "find_node", lambda configured: (Path("/bin/node"), "22.0.0"))
+    monkeypatch.setattr(runtime, "automation_script", lambda: tmp_path / "checkin.mjs")
+    monkeypatch.setattr(runtime, "read_last_result", lambda alias: {"reading": previous})
+    monkeypatch.setattr(runtime, "write_last_result", lambda alias, value: saved.append((alias, value)))
+    monkeypatch.setenv("AUTOJOINQUANT_PREVIOUS_READING", '{"articleTitle":"another-account"}')
+
+    def popen(*args, **kwargs):
+        environments.append(kwargs["env"])
+        return _FakeProcess([
+            ('AUTOJOINQUANT_RESULT={"status":"partial","checkin":{"status":"checked-in"},'
+             '"reading":{"status":"unconfirmed","pointsAwarded":null}}\n')
+        ], return_code=3)
+
+    monkeypatch.setattr(runtime.subprocess, "Popen", popen)
+    user = UserSettings(env_file=str(tmp_path / "user.env"), profile_dir=str(tmp_path / "profile"))
+    for execute in (True, False):
+        assert runtime.run_automation(Settings(), "main", user, execute=execute,
+                                      output=io.StringIO()) == 3
+    assert json.loads(environments[0]["AUTOJOINQUANT_PREVIOUS_READING"]) == previous
+    assert json.loads(environments[1]["AUTOJOINQUANT_PREVIOUS_READING"]) == {}
+    assert len(saved) == 1
+    assert saved[0][0] == "main"
+    assert saved[0][1]["checkin"]["status"] == "checked-in"
+    assert saved[0][1]["exitCode"] == 3

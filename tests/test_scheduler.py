@@ -14,6 +14,7 @@ def test_systemd_units_contain_alias_schedule_and_config_path():
         'ExecStart="/opt/tools/autojoinquant" "--config" '
         '"/home/test/.config/autojoinquant/config.json" "run" "main"'
     ) in service
+    assert "TimeoutStartSec=900" in service
     assert "OnCalendar=*-*-* 08:45:00" in timer
     assert f"Unit=autojoinquant-{alias_key('main')}.service" in timer
     assert "Persistent=true" in timer

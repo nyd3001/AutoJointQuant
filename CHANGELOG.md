@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.9 - 2026-09-17
+
+- Extend real `run` and scheduled runs with one community reading task; dry-run never visits articles or claims reading rewards.
+- Select from the current article list, avoid the previous title when possible, and independently randomize configurable dwell time (45–90 seconds by default).
+- Claim only the reading task's reward, handle its CAPTCHA once, and confirm the task transition plus the matching points increase.
+- Report check-in and reading separately, retain partial results, and skip locally recorded same-day completions (Asia/Shanghai).
+- Allow up to 15 minutes in newly rendered systemd services for the extra browsing and verification phases; existing timers need reinstallation.
+- Live inspection confirmed the reading-to-claim-to-CAPTCHA flow; automated end-to-end reward collection is not yet verified.
+
 ## 0.1.8 - 2026-09-17
 
 - Vary action pauses by ±30% of the configured base, including a separate pause before dragging.

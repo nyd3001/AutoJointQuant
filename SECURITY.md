@@ -16,6 +16,6 @@ The Chrome remote-debugging endpoint is bound to loopback and every alias uses a
 
 ## Scope
 
-The project is intended for the user's own JoinQuant account and daily check-in only. Do not use it to access another person's account or to bypass account controls.
+The project is intended for the user's own JoinQuant account, daily check-in, and one community reading task. Reading claims target only the named task card; the tool does not like, comment, clone strategies, or claim other rewards. Do not use it to access another person's account or to bypass account controls.
 
 Running Chromium as root is rejected by default. `JOINQUANT_ALLOW_NO_SANDBOX=1` exists only for controlled containers and weakens browser isolation.
