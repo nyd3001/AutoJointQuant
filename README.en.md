@@ -51,7 +51,7 @@ autojoinquant schedule remove main
 
 Run `--dry-run` before first use or after environment changes. Output distinguishes login and check-in puzzles; preview interacts with the site and cannot guarantee unchanged account state. Use `autojoinquant <command> --help` for all options.
 
-For slow pages, increase the wait: `JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 autojoinquant run main --dry-run`
+For slow pages, use `JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 autojoinquant run main --dry-run`; this also covers login, verification, and check-in results. Actions wait 1 second for page updates; override with `JOINQUANT_ACTION_DELAY_MS=2000`.
 
 ## Uninstall
 

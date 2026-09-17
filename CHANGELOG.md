@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7 - 2026-09-17
+
+- Wait for late CAPTCHA dialogs and slow login/check-in results using the configurable page timeout instead of fixed 500ms/8s checks.
+- Add a configurable 1-second settling delay before login submission, check-in clicks, and CAPTCHA capture.
+- Distinguish visible rejection messages from unresolved timeouts; stop without automatic resubmission.
+- Treat hidden CAPTCHA nodes as closed and require explicit already-checked-in text instead of a disabled button.
+
 ## 0.1.6 - 2026-09-17
 
 - Refuse existing credential files when adding an account, including concurrent creation.

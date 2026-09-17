@@ -165,6 +165,9 @@ function buildConfig(envFile) {
       expandPath(process.env.JOINQUANT_PROFILE_DIR || join(HERE, ".chrome-profile")),
     ),
     timeoutMs,
+    actionDelayMs: positiveInteger(
+      process.env.JOINQUANT_ACTION_DELAY_MS, "JOINQUANT_ACTION_DELAY_MS", 1000,
+    ),
     pageReadyTimeoutMs: positiveInteger(
       process.env.JOINQUANT_PAGE_READY_TIMEOUT_MS,
       "JOINQUANT_PAGE_READY_TIMEOUT_MS",
@@ -511,27 +514,14 @@ async function navigate(cdp, url) {
   const ready = await waitFor(
     cdp,
     `document.readyState === "interactive" || document.readyState === "complete"`,
-    CONFIG.timeoutMs,
+    pageReadyTimeoutMs(),
   );
-  if (!ready) throw new AppError("页面未在超时前完成加载");
+  if (!ready) throw new AppError("页面加载超时；请检查网络，或增大 JOINQUANT_PAGE_READY_TIMEOUT_MS", 3);
 }
 
 async function pageState(cdp) {
   return evaluate(cdp, `(() => {
     const text = document.body?.innerText || "";
-    const visible = (element) => {
-      const style = getComputedStyle(element);
-      const box = element.getBoundingClientRect();
-      return style.visibility !== "hidden" && style.display !== "none" && box.width > 0 && box.height > 0;
-    };
-    const signButtons = [...document.querySelectorAll("button, [role=button], a")]
-      .filter((item) => visible(item) && /签到/.test((item.innerText || "").trim()));
-    const done = signButtons.find((item) => /今日已签到|已签到/.test((item.innerText || "").trim())
-      || item.disabled || item.getAttribute("aria-disabled") === "true");
-    const action = signButtons.find((item) => !item.disabled
-      && item.getAttribute("aria-disabled") !== "true"
-      && !/今日已签到|已签到/.test((item.innerText || "").trim()));
-    const passwordInput = document.querySelector('input[type="password"]');
     const numberFrom = (value) => {
       const match = String(value || "").match(/[0-9][0-9,]*/);
       return match ? Number(match[0].replaceAll(",", "")) : null;
@@ -544,12 +534,8 @@ async function pageState(cdp) {
     return {
       url: location.href,
       title: document.title,
-      isLoginPage: /\\/user\\/login/.test(location.pathname)
-        || Boolean(passwordInput && /登\\s*录/.test(text)),
+      ...(${readPageSignals.toString()})(),
       loggedIn: text.includes("积分中心") || text.includes("签到领积分"),
-      captcha: Boolean(document.querySelector("#yth_captchar")),
-      alreadyCheckedIn: Boolean(done),
-      signButton: action ? { text: action.innerText.trim(), disabled: Boolean(action.disabled) } : null,
       pointsVisible: /积分/.test(text),
       pointsAvailable: numberFrom(availableElement?.textContent),
       pointsTotal: numberFrom(totalElement?.textContent),
@@ -567,7 +553,7 @@ async function readPoints(cdp, state = null) {
   await waitFor(
     cdp,
     `document.body?.innerText?.includes("可用积分") && document.body?.innerText?.includes("累计获得")`,
-    CONFIG.timeoutMs,
+    pageReadyTimeoutMs(),
   );
   // Vue initially renders zero-valued placeholders after document.readyState is complete.
   await sleep(2000);
@@ -589,28 +575,79 @@ function pageReadyTimeoutMs() {
   return CONFIG.pageReadyTimeoutMs;
 }
 
-async function waitForRelevantPage(cdp) {
-  const ready = await waitFor(cdp, `(() => {
-    const text = document.body?.innerText || "";
-    const passwordInput = document.querySelector('input[type="password"]');
-    const visible = (element) => {
-      const style = getComputedStyle(element);
-      const box = element.getBoundingClientRect();
-      return style.visibility !== "hidden" && style.display !== "none" && box.width > 0 && box.height > 0;
-    };
-    const signButton = [...document.querySelectorAll("button, [role=button], a")]
-      .some((item) => visible(item) && /签到/.test((item.innerText || "").trim()));
-    const loginPage = location.pathname.includes("/user/login") || Boolean(passwordInput);
-    const knownFloor = /今日已签到|签到领积分|积分中心|累计获得[\\s\\S]*积分/.test(text);
-    return loginPage || signButton || knownFloor || Boolean(document.querySelector("#yth_captchar"));
-  })()`, pageReadyTimeoutMs());
-  if (!ready) {
-    const seconds = Math.ceil(CONFIG.pageReadyTimeoutMs / 1000);
-    throw new AppError(
-      `等待 JoinQuant 页面内容超时（${seconds} 秒）；可能是网络较慢或远端页面仍在加载。可设置 JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 后重试`,
-      3,
-    );
+// Executed in the page. Return categories only, never raw account/error text.
+export function readPageSignals() {
+  const visible = (element) => {
+    if (!element) return false;
+    const style = getComputedStyle(element);
+    const box = element.getBoundingClientRect();
+    return style.visibility !== "hidden" && style.display !== "none"
+      && box.width > 0 && box.height > 0;
+  };
+  const buttons = [...document.querySelectorAll("button, [role=button], a")].filter(visible);
+  const action = buttons.find((item) => /签到/.test(item.innerText || "")
+    && !/已签到/.test(item.innerText || "") && !item.disabled
+    && item.getAttribute("aria-disabled") !== "true");
+  const messages = [...document.querySelectorAll(
+    '#yth_captchar, [role=alert], .error, .error-msg, .el-message, .ant-message-notice',
+  )].filter(visible).map((item) => item.innerText || "").join(" ");
+  const failure = /操作频繁|请求频繁|尝试次数/.test(messages) ? "rate-limit"
+    : /(?:账号|用户名|账户)(?:或密码)?(?:错误|不正确|不存在)|密码(?:错误|不正确)/.test(messages) ? "credentials"
+    : /验证失败|校验失败|验证不通过|滑动失败|验证错误/.test(messages) ? "verification"
+    : /网络异常|网络错误|请求超时|连接超时|服务繁忙|系统繁忙|稍后再试/.test(messages) ? "network"
+    : null;
+  return {
+    isLoginPage: location.pathname.includes("/user/login")
+      || visible(document.querySelector('input[type="password"]')),
+    captcha: visible(document.querySelector("#yth_captchar")),
+    alreadyCheckedIn: buttons.some((item) => /已签到/.test(item.innerText || "")),
+    signButton: action ? { text: action.innerText.trim(), disabled: false } : null,
+    failure,
+  };
+}
+
+export async function waitForPageOutcome(cdp, stage, {
+  timeoutMs = pageReadyTimeoutMs(), settleMs = CONFIG.actionDelayMs,
+  pause = sleep, now = Date.now,
+} = {}) {
+  const labels = { page: "页面加载", login: "登录结果", checkin: "签到响应",
+    verification: "验证码校验", success: "签到成功确认" };
+  const failures = { "rate-limit": "站点提示操作频繁或稍后再试",
+    credentials: "站点提示账号或密码错误", verification: "站点明确提示验证码校验失败",
+    network: "站点提示网络或服务异常" };
+  const deadline = now() + timeoutMs;
+  let absentSince = null;
+  let state = null;
+  while (now() < deadline) {
+    try {
+      state = await evaluate(cdp, `(${readPageSignals.toString()})()`);
+    } catch (error) {
+      if (!/execution context|cannot find context|no execution context/i.test(error.message)) throw error;
+      absentSince = null;
+      await pause(300);
+      continue;
+    }
+    if (state.failure) throw new AppError(`${labels[stage]}失败：${failures[state.failure]}；已停止，不自动重试`, 3);
+    const floorReady = !state.isLoginPage && (state.signButton || state.alreadyCheckedIn);
+    if (stage === "page" && (state.isLoginPage || state.captcha || floorReady)) return state;
+    if (stage === "login" && (state.captcha || floorReady)) return state;
+    if (stage === "checkin" && (state.captcha || state.alreadyCheckedIn)) return state;
+    if (stage === "success" && state.alreadyCheckedIn) return state;
+    if (stage === "verification") {
+      absentSince = state.captcha ? null : (absentSince ?? now());
+      if (absentSince !== null && now() - absentSince >= settleMs) return state;
+    }
+    await pause(300);
   }
+  const detail = state?.captcha ? "验证码仍可见，但未识别到明确拒绝提示" : "未观察到所需页面状态";
+  throw new AppError(
+    `${labels[stage]}超时（${Math.ceil(timeoutMs / 1000)} 秒）：${detail}；可能是网络较慢、响应未完成或页面结构变化。可增大 JOINQUANT_PAGE_READY_TIMEOUT_MS；已停止，不自动重试`,
+    3,
+  );
+}
+
+async function waitForRelevantPage(cdp) {
+  await waitForPageOutcome(cdp, "page");
   return pageState(cdp);
 }
 
@@ -628,7 +665,7 @@ async function fillLogin(cdp, { moveCaptcha = true } = {}) {
     const hasPassword = inputs.some((input) => input.type === "password" || /密码/.test(input.placeholder || ""));
     const hasUser = inputs.some((input) => input.type === "tel" || /手机号|账号|用户名/.test(input.placeholder || "") || /username|account|mobile/.test(input.name || ""));
     const hasButton = Boolean(document.querySelector("button.btnPwdSubmit, button[type=submit], input[type=submit]"))
-      || [...document.querySelectorAll("button, a")].some((item) => /登\s*录/.test(item.innerText || ""));
+      || [...document.querySelectorAll("button, a")].some((item) => /登\\s*录/.test(item.innerText || ""));
     return hasUser && hasPassword && hasButton;
   })()`, pageReadyTimeoutMs());
   if (!controlsReady) throw new AppError("等待后仍未找到登录控件", 3);
@@ -638,7 +675,7 @@ async function fillLogin(cdp, { moveCaptcha = true } = {}) {
     const pwd = find(["input[name=pwd]", "input[name=password]", "input[type=password]", "input[placeholder='请输入密码']"]);
     const agree = document.querySelector("#agreementBox, input[type=checkbox]");
     const button = find(["button.btnPwdSubmit", "button[type=submit]", "input[type=submit]"])
-      || [...document.querySelectorAll("button, a")].find((item) => /登\s*录/.test(item.innerText || ""));
+      || [...document.querySelectorAll("button, a")].find((item) => /登\\s*录/.test(item.innerText || ""));
     if (!user || !pwd || !button) return { ok: false, reason: "login controls not found" };
     const setValue = (element, value) => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
@@ -649,30 +686,36 @@ async function fillLogin(cdp, { moveCaptcha = true } = {}) {
     setValue(user, ${username});
     setValue(pwd, ${password});
     if (agree && !agree.checked) agree.click();
-    // Let Runtime.evaluate finish before the click can navigate the page.
-    setTimeout(() => button.click(), 0);
     return { ok: true };
   })()`);
   if (!result?.ok) throw new AppError(result?.reason || "无法填写登录表单", 3);
-  const captchaOrNavigation = await waitFor(
-    cdp,
-    `Boolean(document.querySelector("#yth_captchar")) || !location.pathname.includes("/user/login")`,
-    pageReadyTimeoutMs(),
-  );
-  const captchaVisible = await evaluate(cdp, `Boolean(document.querySelector("#yth_captchar"))`);
-  if (captchaVisible) {
+  // Allow input/change handlers to update button validity before submitting once.
+  await sleep(CONFIG.actionDelayMs);
+  const submitted = await waitFor(cdp, `(() => {
+    const button = document.querySelector("button.btnPwdSubmit, button[type=submit], input[type=submit]")
+      || [...document.querySelectorAll("button, a")].find((item) => /登\\s*录/.test(item.innerText || ""));
+    if (!button || button.disabled || button.getAttribute("aria-disabled") === "true"
+      || button.getBoundingClientRect().width <= 0) return false;
+    setTimeout(() => button.click(), 0);
+    return true;
+  })()`, pageReadyTimeoutMs());
+  if (!submitted) throw new AppError("等待登录按钮可用超时；未提交登录，请检查表单或页面加载", 3);
+  let outcome = await waitForPageOutcome(cdp, "login");
+  const captchaParsed = outcome.captcha;
+  if (captchaParsed) {
     await solveCaptcha(cdp, { move: moveCaptcha });
-    if (moveCaptcha) {
-      await waitFor(cdp, `!location.pathname.includes("/user/login")`, pageReadyTimeoutMs());
-    }
+    if (!moveCaptcha) return { captchaParsed: true, loginCompleted: false };
+    outcome = await waitForPageOutcome(cdp, "login");
+    if (outcome.captcha) throw new AppError("登录后再次出现验证码；已停止，不自动重试", 3);
   }
   return {
-    captchaParsed: Boolean(captchaVisible),
-    loginCompleted: Boolean(captchaOrNavigation) && !captchaVisible && !await evaluate(cdp, `location.pathname.includes("/user/login")`),
+    captchaParsed,
+    loginCompleted: !outcome.isLoginPage,
   };
 }
 
 async function captureCaptcha(cdp) {
+  await sleep(CONFIG.actionDelayMs);
   const responseText = await evaluate(cdp, `fetch("/common/verifyCode/captchar", {
     method: "POST",
     headers: { "X-Requested-With": "XMLHttpRequest" }
@@ -791,7 +834,7 @@ export async function dragSlider(cdp, geometry, gapX, { intentionallyWrong = fal
 }
 
 export async function solveCaptcha(cdp, { move = true } = {}, {
-  capture = captureCaptcha, solve = runSolver, drag = dragCaptcha,
+  capture = captureCaptcha, solve = runSolver, drag = dragCaptcha, wait = waitForPageOutcome,
 } = {}) {
   const captcha = await capture(cdp);
   const gapX = solve(captcha);
@@ -803,12 +846,12 @@ export async function solveCaptcha(cdp, { move = true } = {}, {
   }
   info(`验证码缺口已由脚本计算（x=${gapX}），开始自动拖动验证`);
   await drag(cdp, gapX);
-  const result = await waitFor(cdp, `!document.querySelector("#yth_captchar")`, 8000);
-  if (!result) throw new AppError("自动拖动后验证码仍未消失", 3);
+  await wait(cdp, "verification");
   return { parsed: true };
 }
 
 async function clickSignButton(cdp) {
+  await sleep(CONFIG.actionDelayMs);
   return evaluate(cdp, `(() => {
     const visible = (element) => {
       const style = getComputedStyle(element);
@@ -843,12 +886,7 @@ async function performCheckin(cdp) {
   }
   const baseline = await readPoints(cdp, before);
   await navigate(cdp, FLOOR_URL);
-  await waitFor(
-    cdp,
-    `document.body?.innerText?.includes("签到") || Boolean(document.querySelector("#yth_captchar"))`,
-    CONFIG.timeoutMs,
-  );
-  before = await pageState(cdp);
+  before = await waitForRelevantPage(cdp);
   if (before.alreadyCheckedIn) {
     return {
       status: "already-checked-in",
@@ -862,27 +900,18 @@ async function performCheckin(cdp) {
   }
   const clicked = await clickSignButton(cdp);
   if (!clicked) throw new AppError("签到按钮在点击前消失或不可用", 3);
-  await sleep(500);
-  if (await evaluate(cdp, `Boolean(document.querySelector("#yth_captchar"))`)) await solveCaptcha(cdp);
-  const success = await waitFor(cdp, `(() => {
-    const text = document.body?.innerText || "";
-    return /签到成功|获得\\s*\\d+\\s*积分/.test(text)
-      || [...document.querySelectorAll("button, [role=button], a")].some((item) => {
-        const label = (item.innerText || "").trim();
-        return /今日已签到|已签到/.test(label)
-          || (/签到/.test(label) && (item.disabled || item.getAttribute("aria-disabled") === "true"));
-      });
-  })()`, 8000);
-  if (!success) throw new AppError("未观察到签到成功证据", 3);
+  const response = await waitForPageOutcome(cdp, "checkin");
+  if (response.captcha) await solveCaptcha(cdp);
+  await waitForPageOutcome(cdp, "success");
   const successState = await pageState(cdp);
   await cdp.send("Page.reload");
-  await sleep(500);
+  await sleep(CONFIG.actionDelayMs);
   await waitFor(
     cdp,
     `document.readyState === "interactive" || document.readyState === "complete"`,
-    CONFIG.timeoutMs,
+    pageReadyTimeoutMs(),
   );
-  const after = await pageState(cdp);
+  const after = await waitForRelevantPage(cdp);
   const balances = await readPoints(cdp, after);
   const availableDelta = Number.isFinite(baseline.pointsAvailable)
     && Number.isFinite(balances.pointsAvailable)
@@ -947,7 +976,7 @@ function diagnose() {
     : `uv: ${resolveExecutable(process.env.JOINQUANT_UV || "uv") || "未发现"}`;
   info(`平台=${process.platform}/${process.arch}，Node=${process.versions.node}`);
   info(`浏览器=${browser}`);
-  info(`profile=${CONFIG.profile}，调试端口=${CONFIG.debugPort}，headless=${CONFIG.headless}，页面等待=${CONFIG.pageReadyTimeoutMs}ms`);
+  info(`profile=${CONFIG.profile}，调试端口=${CONFIG.debugPort}，headless=${CONFIG.headless}，页面等待=${CONFIG.pageReadyTimeoutMs}ms，操作间隔=${CONFIG.actionDelayMs}ms`);
   info(`环境变量文件=${CONFIG.envFile || "未加载"}，登录凭据=${credentials}，求解器运行时=${pythonRunner}`);
   if (browser === "未发现") throw new AppError(browserInstallHint());
   if (pythonRunner.endsWith("未发现")) {
@@ -978,9 +1007,6 @@ async function main() {
         });
         return;
       }
-      if (!login.loginCompleted) {
-        await waitFor(cdp, `!location.pathname.includes("/user/login")`, pageReadyTimeoutMs());
-      }
       state = await waitForRelevantPage(cdp);
       if (state.isLoginPage) throw new AppError("登录未完成", 3);
     }
@@ -994,13 +1020,9 @@ async function main() {
           if (!await clickSignButton(cdp)) {
             throw new AppError("预演时未能点击签到按钮", 3);
           }
-          const captchaOpened = await waitFor(
-            cdp,
-            `Boolean(document.querySelector("#yth_captchar"))`,
-            CONFIG.timeoutMs,
-          );
-          if (!captchaOpened) {
-            throw new AppError("预演点击签到后未出现拼图验证，已停止以避免执行签到", 3);
+          const outcome = await waitForPageOutcome(cdp, "checkin");
+          if (!outcome.captcha) {
+            throw new AppError("预演点击后页面已显示已签到，未出现拼图；站点状态可能已改变，请检查账号", 3);
           }
         }
         await solveCaptcha(cdp, { move: false });
