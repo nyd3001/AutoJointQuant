@@ -51,7 +51,7 @@ autojoinquant schedule remove main
 
 首次使用或环境变化后先执行 `--dry-run`。输出会区分登录拼图与签到拼图；预演涉及网页操作，无法保证站点状态不变。完整参数见 `autojoinquant <command> --help`。
 
-页面加载较慢时可调整等待时间：`JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 autojoinquant run main --dry-run`。该参数也用于登录、验证码校验和签到结果等待；操作前默认等待 1 秒，可用 `JOINQUANT_ACTION_DELAY_MS=2000` 调整。
+页面较慢时设置 `JOINQUANT_PAGE_READY_TIMEOUT_MS=90000`。登录提交、点击签到、读取拼图及拖动前默认等待 0.7–1.3 秒，可用 `JOINQUANT_ACTION_DELAY_MS=2000` 将范围调为 1.4–2.6 秒；拖动时长及步间隔也有波动。
 
 ## 卸载
 

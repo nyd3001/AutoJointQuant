@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8 - 2026-09-17
+
+- Vary action pauses by ±30% of the configured base, including a separate pause before dragging.
+- Vary planned drag timing from 0.7–1.3 seconds and individual step intervals while preserving endpoints and preview constraints.
+- Test timing bounds, configuration scaling, and unchanged preview release positions.
+
 ## 0.1.7 - 2026-09-17
 
 - Wait for late CAPTCHA dialogs and slow login/check-in results using the configurable page timeout instead of fixed 500ms/8s checks.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { choosePreviewOffset, dragSlider, solveCaptcha } from "../checkin.mjs";
+import { choosePreviewOffset, dragSlider, solveCaptcha, jitterDelay, planDragTiming } from "../checkin.mjs";
 
 const geometry = (maxOffset) => ({
   track: { left: 10, top: 20, width: maxOffset + 40, height: 40 },
@@ -83,4 +83,42 @@ test("the ordinary drag still releases at the solved offset", async () => {
     geometry(300), 120);
   assert.equal(offset, 120);
   assert.equal(events.at(-1).x, 150);
+});
+
+test("action timing stays within the documented bounds and scales with configuration", () => {
+  for (const base of [1000, 2000]) {
+    assert.equal(jitterDelay(base, () => 0), base * 0.7);
+    assert.equal(jitterDelay(base, () => 0.5), base);
+    assert.equal(jitterDelay(base, () => 1), base * 1.3);
+  }
+});
+
+test("drag timing varies both the total duration and individual intervals", () => {
+  for (const totalSample of [0, 0.5, 1]) {
+    let index = 0;
+    const timings = planDragTiming(() => index++ === 0 ? totalSample : (index % 2));
+    assert.equal(timings.length, 48);
+    assert.ok(timings.every((ms) => ms > 0));
+    assert.ok(new Set(timings).size > 1);
+    assert.ok(Math.abs(timings.reduce((sum, ms) => sum + ms, 0)
+      - (700 + 600 * totalSample)) < 0.001);
+  }
+});
+
+test("timing variation does not change preview offset or release count", async () => {
+  for (const sample of [0, 1]) {
+    const events = [];
+    const waits = [];
+    const offset = await dragSlider({ send: async (_method, event) => events.push(event) },
+      geometry(300), 120, {
+        intentionallyWrong: true, random: () => sample,
+        pause: async (ms) => waits.push(ms),
+      });
+    assert.equal(offset, 292);
+    assert.ok(Math.abs(offset - 120) >= 64);
+    assert.equal(waits.length, 48);
+    assert.ok(Math.abs(waits.reduce((sum, ms) => sum + ms, 0) - (700 + sample * 600)) < 0.001);
+    assert.equal(events.filter((event) => event.type === "mouseReleased").length, 1);
+    assert.equal(events.at(-1).x, 322);
+  }
 });

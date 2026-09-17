@@ -575,6 +575,21 @@ function pageReadyTimeoutMs() {
   return CONFIG.pageReadyTimeoutMs;
 }
 
+export function jitterDelay(baseMs, random = Math.random) {
+  return Math.max(1, Math.round(baseMs * (0.7 + 0.6 * random())));
+}
+
+async function pauseBeforeAction() {
+  await sleep(jitterDelay(CONFIG.actionDelayMs));
+}
+
+export function planDragTiming(random = Math.random) {
+  const durationMs = jitterDelay(1000, random);
+  const weights = Array.from({ length: 48 }, () => jitterDelay(100, random));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  return weights.map((weight) => durationMs * weight / total);
+}
+
 // Executed in the page. Return categories only, never raw account/error text.
 export function readPageSignals() {
   const visible = (element) => {
@@ -690,7 +705,7 @@ async function fillLogin(cdp, { moveCaptcha = true } = {}) {
   })()`);
   if (!result?.ok) throw new AppError(result?.reason || "无法填写登录表单", 3);
   // Allow input/change handlers to update button validity before submitting once.
-  await sleep(CONFIG.actionDelayMs);
+  await pauseBeforeAction();
   const submitted = await waitFor(cdp, `(() => {
     const button = document.querySelector("button.btnPwdSubmit, button[type=submit], input[type=submit]")
       || [...document.querySelectorAll("button, a")].find((item) => /登\\s*录/.test(item.innerText || ""));
@@ -715,7 +730,7 @@ async function fillLogin(cdp, { moveCaptcha = true } = {}) {
 }
 
 async function captureCaptcha(cdp) {
-  await sleep(CONFIG.actionDelayMs);
+  await pauseBeforeAction();
   const responseText = await evaluate(cdp, `fetch("/common/verifyCode/captchar", {
     method: "POST",
     headers: { "X-Requested-With": "XMLHttpRequest" }
@@ -776,6 +791,8 @@ function runSolver(captcha) {
 }
 
 async function dragCaptcha(cdp, gapX, { intentionallyWrong = false } = {}) {
+  // Read geometry after the pause so a moving dialog cannot leave stale coordinates.
+  await pauseBeforeAction();
   const geometry = await waitFor(cdp, `(() => {
     const track = document.querySelector("#slideVerifyDragControl, #drag, .valid-code__drag");
     const handle = track?.querySelector(".valid-code__drag-handle, .handler")
@@ -811,13 +828,16 @@ export function choosePreviewOffset(solvedOffset, maxOffset) {
   return offset;
 }
 
-export async function dragSlider(cdp, geometry, gapX, { intentionallyWrong = false } = {}) {
+export async function dragSlider(cdp, geometry, gapX, {
+  intentionallyWrong = false, pause = sleep, random = Math.random,
+} = {}) {
   const maxOffset = Math.max(0, geometry.track.width - geometry.handle.width);
   const solvedOffset = Math.min(Math.max(gapX, 0), maxOffset);
   const offset = intentionallyWrong ? choosePreviewOffset(solvedOffset, maxOffset) : solvedOffset;
   const startX = geometry.handle.left + geometry.handle.width / 2;
   const startY = geometry.handle.top + geometry.handle.height / 2;
-  const steps = 48;
+  const timings = planDragTiming(random);
+  const steps = timings.length;
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: startX, y: startY, buttons: 0 });
   await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: startX, y: startY, button: "left", buttons: 1, clickCount: 1 });
   for (let index = 1; index <= steps; index += 1) {
@@ -827,7 +847,7 @@ export async function dragSlider(cdp, geometry, gapX, { intentionallyWrong = fal
       type: "mouseMoved", x: startX + offset * eased, y: startY + Math.sin(progress * Math.PI) * 0.4,
       button: "left", buttons: 1,
     });
-    await sleep(12);
+    await pause(timings[index - 1]);
   }
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: startX + offset, y: startY, button: "left", buttons: 0, clickCount: 1 });
   return offset;
@@ -851,7 +871,7 @@ export async function solveCaptcha(cdp, { move = true } = {}, {
 }
 
 async function clickSignButton(cdp) {
-  await sleep(CONFIG.actionDelayMs);
+  await pauseBeforeAction();
   return evaluate(cdp, `(() => {
     const visible = (element) => {
       const style = getComputedStyle(element);
@@ -976,7 +996,7 @@ function diagnose() {
     : `uv: ${resolveExecutable(process.env.JOINQUANT_UV || "uv") || "未发现"}`;
   info(`平台=${process.platform}/${process.arch}，Node=${process.versions.node}`);
   info(`浏览器=${browser}`);
-  info(`profile=${CONFIG.profile}，调试端口=${CONFIG.debugPort}，headless=${CONFIG.headless}，页面等待=${CONFIG.pageReadyTimeoutMs}ms，操作间隔=${CONFIG.actionDelayMs}ms`);
+  info(`profile=${CONFIG.profile}，调试端口=${CONFIG.debugPort}，headless=${CONFIG.headless}，页面等待=${CONFIG.pageReadyTimeoutMs}ms，操作间隔基准=${CONFIG.actionDelayMs}ms（±30%）`);
   info(`环境变量文件=${CONFIG.envFile || "未加载"}，登录凭据=${credentials}，求解器运行时=${pythonRunner}`);
   if (browser === "未发现") throw new AppError(browserInstallHint());
   if (pythonRunner.endsWith("未发现")) {
