@@ -31,7 +31,7 @@ The uv installation requires Python 3.10+, uv, Node.js 22+, and Chrome/Chromium.
 # Add an account; confirm the password when prompted
 autojoinquant config add main
 
-# Parse the puzzle and deliberately miss the target (no verification or check-in)
+# Parse the puzzle, drag away from the solved position, and stop
 autojoinquant run main --dry-run
 
 # Check in and inspect status
@@ -49,7 +49,7 @@ autojoinquant schedule status main
 autojoinquant schedule remove main
 ```
 
-Run `--dry-run` before first use or after environment changes. Use `autojoinquant <command> --help` for all options.
+Run `--dry-run` before first use or after environment changes. Output distinguishes login and check-in puzzles; preview interacts with the site and cannot guarantee unchanged account state. Use `autojoinquant <command> --help` for all options.
 
 For slow pages, increase the wait: `JOINQUANT_PAGE_READY_TIMEOUT_MS=90000 autojoinquant run main --dry-run`
 

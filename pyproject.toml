@@ -1,6 +1,6 @@
 [project]
 name = "autojoinquant"
-version = "0.1.5"
+version = "0.1.6"
 description = "Multi-account cross-platform JoinQuant daily check-in automation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,6 +30,7 @@ dev = [
 ]
 
 [tool.uv]
+# Development commands use source directly; install the CLI with uv tool install .
 package = false
 default-groups = ["dev"]
 

@@ -10,6 +10,7 @@ Use either workflow:
 uv sync
 uv run pytest
 uv run ruff check .
+node --test tests/*.test.mjs
 uv build
 ```
 
@@ -24,7 +25,7 @@ nix flake check
 
 ## Pull requests
 
-- Keep `run <alias> --dry-run` free of login, CAPTCHA movement, and external writes.
+- Keep `run <alias> --dry-run` limited to login and one deliberately offset CAPTCHA drag, with no correct-drag retry. It may stop at a login CAPTCHA before reaching check-in.
 - Keep credentials, Chrome profiles, state, logs, and scheduler identifiers isolated by alias.
 - Do not add credentials, cookies, CAPTCHA images, or browser profiles to commits.
 - Update both `README.md` and `README.en.md` when user-facing behavior changes.

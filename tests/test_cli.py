@@ -2,7 +2,7 @@ import io
 from pathlib import Path
 
 from autojoinquant import cli
-from autojoinquant.config import UserSettings, load_settings, read_credentials
+from autojoinquant.config import UserSettings, load_settings, read_credentials, write_credentials
 from autojoinquant.scheduler import ScheduleStatus
 
 
@@ -94,3 +94,25 @@ def test_run_executes_by_default_and_dry_run_is_explicit(monkeypatch, tmp_path: 
 def test_parser_has_no_password_argument():
     help_text = cli.build_parser().format_help()
     assert "--password " not in help_text
+
+
+def test_config_add_refuses_credentials_outside_current_registry(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-home"))
+    user = UserSettings.defaults("main")
+    path = Path(user.env_file)
+    write_credentials("original", "original-secret", path)
+    original = path.read_bytes()
+    registry = tmp_path / "separate-registry.json"
+
+    def unexpected_prompt(*_args):
+        raise AssertionError("must reject existing credentials before prompting")
+
+    monkeypatch.setattr(cli, "_prompt_password", unexpected_prompt)
+    code = cli.main([
+        "--config", str(registry), "config", "add", "main",
+        "--username", "replacement", "--no-schedule",
+    ])
+    assert code == 2
+    assert "credentials already exist" in capsys.readouterr().err
+    assert path.read_bytes() == original
+    assert not registry.exists()

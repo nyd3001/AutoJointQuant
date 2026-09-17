@@ -232,6 +232,8 @@ def _run_config_add(args: argparse.Namespace) -> int:
     if alias in settings.users:
         raise ConfigError(f"user alias {alias!r} already exists; use 'config edit'")
     user = UserSettings.defaults(alias)
+    if os.path.lexists(user.env_file):
+        raise ConfigError(f"credentials already exist: {user.env_file}; choose another alias")
     username = _prompt_username("", args.username)
     password = _prompt_password("", args.password_stdin)
     if not username or not password:
@@ -248,7 +250,7 @@ def _run_config_add(args: argparse.Namespace) -> int:
     )
     settings = replace(settings, node_bin=str(node))
     settings = replace_user(settings, alias, user)
-    credential_path = write_credentials(username, password, user.env_file)
+    credential_path = write_credentials(username, password, user.env_file, overwrite=False)
     save_settings(settings, config_path)
     print(f"Added user: {alias} ({_masked_username(username)})")
     print(f"Credentials: {credential_path} (mode 0600; password hidden)")

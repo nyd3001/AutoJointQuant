@@ -97,3 +97,38 @@ def test_last_results_are_isolated_by_alias(tmp_path: Path, monkeypatch):
     write_last_result("work", {"pointsAvailable": 20})
     assert read_last_result("main") == {"pointsAvailable": 10}
     assert read_last_result("work") == {"pointsAvailable": 20}
+
+
+def test_credentials_create_only_preserves_existing_file(tmp_path: Path):
+    path = tmp_path / "credentials.env"
+    write_credentials("original", "original-secret", path, overwrite=False)
+    original = path.read_bytes()
+    with pytest.raises(ConfigError, match="credentials already exist"):
+        write_credentials("replacement", "replacement-secret", path, overwrite=False)
+    assert path.read_bytes() == original
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_credentials_create_only_preserves_concurrent_write(tmp_path: Path, monkeypatch):
+    path = tmp_path / "credentials.env"
+    original_link = os.link
+
+    def concurrent_link(source, destination):
+        destination.write_text("concurrent-owner")
+        original_link(source, destination)
+
+    monkeypatch.setattr(os, "link", concurrent_link)
+    with pytest.raises(ConfigError, match="credentials already exist"):
+        write_credentials("new", "secret", path, overwrite=False)
+    assert path.read_text() == "concurrent-owner"
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_credentials_create_only_refuses_dangling_symlink(tmp_path: Path):
+    path = tmp_path / "credentials.env"
+    target = tmp_path / "missing.env"
+    path.symlink_to(target)
+    with pytest.raises(ConfigError, match="credentials already exist"):
+        write_credentials("new", "secret", path, overwrite=False)
+    assert path.is_symlink()
+    assert not target.exists()

@@ -68,7 +68,7 @@
               ./checkin.mjs
               ./pyproject.toml
               (pkgs.lib.fileset.fileFilter (file: file.hasExt "py") ./src)
-              (pkgs.lib.fileset.fileFilter (file: file.hasExt "py") ./tests)
+              (pkgs.lib.fileset.fileFilter (file: file.hasExt "py" || file.hasExt "mjs") ./tests)
             ];
           };
         in {
@@ -79,6 +79,7 @@
             chmod -R u+w source
             cd source
             node --check checkin.mjs
+            node --test tests/*.test.mjs
             python -m ruff check .
             python -m pytest
             touch "$out"

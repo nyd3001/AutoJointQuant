@@ -171,7 +171,9 @@ def load_settings(path: Path | str | None = None, *, required: bool = False) -> 
     return _validate_settings(raw)
 
 
-def _atomic_write(path: Path, content: str, mode: int = 0o600) -> None:
+def _atomic_write(
+    path: Path, content: str, mode: int = 0o600, *, overwrite: bool = True
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
@@ -180,7 +182,11 @@ def _atomic_write(path: Path, content: str, mode: int = 0o600) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        if overwrite:
+            os.replace(temporary, path)
+        else:
+            # Publish the complete file atomically, refusing any existing destination.
+            os.link(temporary, path)
         os.chmod(path, mode)
     finally:
         try:
@@ -254,7 +260,9 @@ def read_credentials(path: Path | str) -> dict[str, str]:
     return result
 
 
-def write_credentials(username: str, password: str, path: Path | str) -> Path:
+def write_credentials(
+    username: str, password: str, path: Path | str, *, overwrite: bool = True
+) -> Path:
     env_path = Path(path).expanduser()
     for name, value in (("username", username), ("password", password)):
         if not value:
@@ -262,7 +270,7 @@ def write_credentials(username: str, password: str, path: Path | str) -> Path:
         if "\n" in value or "\r" in value or "\0" in value:
             raise ConfigError(f"{name} contains an unsupported control character")
     try:
-        old_lines = env_path.read_text(encoding="utf-8").splitlines()
+        old_lines = env_path.read_text(encoding="utf-8").splitlines() if overwrite else []
     except FileNotFoundError:
         old_lines = ["# AutoJointQuant credentials. Keep this file private; do not source it."]
     kept = [
@@ -279,7 +287,10 @@ def write_credentials(username: str, password: str, path: Path | str) -> Path:
             f"JOINQUANT_PASSWORD={json.dumps(password, ensure_ascii=False)}",
         ]
     )
-    _atomic_write(env_path, "\n".join(kept).rstrip() + "\n")
+    try:
+        _atomic_write(env_path, "\n".join(kept).rstrip() + "\n", overwrite=overwrite)
+    except FileExistsError as exc:
+        raise ConfigError(f"credentials already exist: {env_path}; choose another alias") from exc
     return env_path
 
 

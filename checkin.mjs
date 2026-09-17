@@ -10,6 +10,7 @@ import {
   openSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -749,16 +750,28 @@ async function dragCaptcha(cdp, gapX, { intentionallyWrong = false } = {}) {
       3,
     );
   }
-  const maxOffset = Math.max(0, geometry.track.width - geometry.handle.width);
-  const solvedOffset = Math.min(Math.max(gapX, 0), maxOffset);
-  const previewCandidates = [Math.min(8, maxOffset), Math.max(0, maxOffset - 8)];
-  const previewOffset = previewCandidates.reduce((farthest, candidate) => (
+  return dragSlider(cdp, geometry, gapX, { intentionallyWrong });
+}
+
+export function choosePreviewOffset(solvedOffset, maxOffset) {
+  if (![solvedOffset, maxOffset].every(Number.isFinite)
+      || maxOffset < 0 || solvedOffset < 0 || solvedOffset > maxOffset) {
+    throw new AppError("验证码滑块位置无效", 3);
+  }
+  const candidates = [Math.min(8, maxOffset), Math.max(0, maxOffset - 8)];
+  const offset = candidates.reduce((farthest, candidate) => (
     Math.abs(candidate - solvedOffset) > Math.abs(farthest - solvedOffset) ? candidate : farthest
   ));
-  if (intentionallyWrong && Math.abs(previewOffset - solvedOffset) < 64) {
+  if (Math.abs(offset - solvedOffset) < 64) {
     throw new AppError("验证码滑轨过短，无法安全选择与求解位置相差至少 64px 的预演位置", 3);
   }
-  const offset = intentionallyWrong ? previewOffset : solvedOffset;
+  return offset;
+}
+
+export async function dragSlider(cdp, geometry, gapX, { intentionallyWrong = false } = {}) {
+  const maxOffset = Math.max(0, geometry.track.width - geometry.handle.width);
+  const solvedOffset = Math.min(Math.max(gapX, 0), maxOffset);
+  const offset = intentionallyWrong ? choosePreviewOffset(solvedOffset, maxOffset) : solvedOffset;
   const startX = geometry.handle.left + geometry.handle.width / 2;
   const startY = geometry.handle.top + geometry.handle.height / 2;
   const steps = 48;
@@ -777,17 +790,19 @@ async function dragCaptcha(cdp, gapX, { intentionallyWrong = false } = {}) {
   return offset;
 }
 
-async function solveCaptcha(cdp, { move = true } = {}) {
-  const captcha = await captureCaptcha(cdp);
-  const gapX = runSolver(captcha);
+export async function solveCaptcha(cdp, { move = true } = {}, {
+  capture = captureCaptcha, solve = runSolver, drag = dragCaptcha,
+} = {}) {
+  const captcha = await capture(cdp);
+  const gapX = solve(captcha);
   if (!move) {
     info(`验证码缺口已由脚本计算（x=${gapX}）`);
-    const previewOffset = await dragCaptcha(cdp, gapX, { intentionallyWrong: true });
+    const previewOffset = await drag(cdp, gapX, { intentionallyWrong: true });
     info(`预演已拖动到刻意错误的位置（x=${Math.round(previewOffset)}），与求解位置相差 ${Math.round(Math.abs(previewOffset - gapX))}px`);
     return { parsed: true, gapX, previewOffset };
   }
   info(`验证码缺口已由脚本计算（x=${gapX}），开始自动拖动验证`);
-  await dragCaptcha(cdp, gapX);
+  await drag(cdp, gapX);
   const result = await waitFor(cdp, `!document.querySelector("#yth_captchar")`, 8000);
   if (!result) throw new AppError("自动拖动后验证码仍未消失", 3);
   return { parsed: true };
@@ -883,7 +898,8 @@ async function performCheckin(cdp) {
 
 function emitResult(result) {
   if (result.status === "dry-run-captcha-parsed") {
-    info("拼图识别与滑块拖动链路已验证；未尝试通过验证码，不执行签到");
+    const stage = result.captchaStage === "login" ? "登录拼图（尚未进入签到阶段）" : "签到拼图";
+    info(`预演阶段：${stage}；已按偏离求解位置的方式拖动，流程已停止`);
   } else {
     const display = (value) => Number.isFinite(value) ? String(value) : "未识别";
     info(
@@ -954,6 +970,7 @@ async function main() {
       if (!CONFIG.execute && login.captchaParsed) {
         emitResult({
           status: "dry-run-captcha-parsed",
+          captchaStage: "login",
           captchaParsed: true,
           pointsAwarded: null,
           pointsAvailable: null,
@@ -989,6 +1006,7 @@ async function main() {
         await solveCaptcha(cdp, { move: false });
         emitResult({
           status: "dry-run-captcha-parsed",
+          captchaStage: "checkin",
           captchaParsed: true,
           pointsAwarded: null,
           pointsAvailable: state.pointsAvailable,
@@ -1037,4 +1055,6 @@ async function bootstrap() {
   await main();
 }
 
-bootstrap().catch((error) => fail(error.message || String(error), error.exitCode || 1));
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  bootstrap().catch((error) => fail(error.message || String(error), error.exitCode || 1));
+}

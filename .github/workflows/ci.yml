@@ -27,8 +27,10 @@ jobs:
       - run: uv run ruff check .
       - run: uv run pytest
       - run: node --check checkin.mjs
+      - run: node --test tests/*.test.mjs
       - run: uv build
-      - run: uv run autojoinquant --help
+      - run: uv tool install dist/*.whl
+      - run: '"$(uv tool dir --bin)/autojoinquant" --help'
 
   nix:
     runs-on: ubuntu-latest

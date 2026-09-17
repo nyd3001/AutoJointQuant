@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6 - 2026-09-17
+
+- Refuse existing credential files when adding an account, including concurrent creation.
+- Test preview offset boundaries, CDP drag events, and stopping without a correct-drag retry.
+- Identify login versus check-in CAPTCHA stages in preview results and logs.
+- Verify the installed wheel CLI in CI and run JavaScript tests in CI and Nix checks.
+
 ## 0.1.5 - 2026-09-16
 
 - Added support for JoinQuant's current `#slideVerifyDragControl` CAPTCHA track and `.valid-code__drag-handle` slider while retaining the legacy selectors.
