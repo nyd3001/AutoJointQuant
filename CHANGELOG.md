@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10 - 2026-09-17
+
+- Extend `--dry-run` to community reading: randomly browse when needed, open the reward CAPTCHA, calculate the gap, and drag once to an intentionally wrong position at least 64px away.
+- Preview check-in and reading sequentially after login; skip completed tasks, but stop after a login puzzle or any failure without a correct-drag fallback.
+- Report reading CAPTCHA evidence separately and keep real-run history unchanged. Stop if a claim click changes task/points without the expected CAPTCHA.
+- Add offline regression tests for wrong CDP events, delayed/missing challenges, stage ordering, and preview result isolation. Live dry-run remains unverified.
+
 ## 0.1.9 - 2026-09-17
 
 - Extend real `run` and scheduled runs with one community reading task; dry-run never visits articles or claims reading rewards.

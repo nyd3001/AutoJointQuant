@@ -31,7 +31,7 @@ uv 安装需要 Python 3.10+、uv、Node.js 22+ 和 Chrome/Chromium。
 # 添加账号；按提示输入用户名、确认密码和定时设置
 autojoinquant config add main
 
-# 登录、解析拼图并拖到偏离求解位置的位置后停止
+# 登录后预演签到和浏览奖励拼图，每个阶段只错位拖动一次
 autojoinquant run main --dry-run
 
 # 签到、随机浏览一篇文章并领取积分；查看状态
@@ -49,9 +49,9 @@ autojoinquant schedule status main
 autojoinquant schedule remove main
 ```
 
-首次使用或环境变化后先执行 `--dry-run`。输出会区分登录拼图与签到拼图；预演涉及网页操作，无法保证站点状态不变。完整参数见 `autojoinquant <command> --help`。
+首次使用或环境变化后先执行 `--dry-run`：登录成功后依次预演签到和浏览奖励，浏览文章后点击“立即领取”打开拼图，计算缺口并拖到相距至少 64px 的错误位置，不尝试通过验证；已签到则跳过签到阶段。遇到登录拼图仅预演登录后停止；任务已完成则跳过，任何异常均停止且不重试。预演会浏览文章、点击按钮，无法保证站点状态不变，也不会覆盖正式运行记录。完整参数见 `autojoinquant <command> --help`。
 
-`run`（含定时任务）会随机选择社区文章，尽量避开上次文章，正文加载后随机停留 **45–90 秒**，再领取浏览奖励；本机记录当天已完成则跳过，已有待领奖励则直接领取。签到与浏览积分分别报告；`--dry-run` 不浏览文章、不领取浏览奖励。可用 `JOINQUANT_READING_MIN_MS` / `JOINQUANT_READING_MAX_MS` 调整停留区间；停留不保证奖励，未确认到账会报错且不自动重试。
+`run`（含定时任务）会随机选择社区文章，尽量避开上次文章，正文加载后随机停留 **45–90 秒**，再领取浏览奖励；本机记录当天已完成则跳过，已有待领奖励则不重复浏览。签到与浏览积分分别报告。预演使用相同的随机浏览流程；可用 `JOINQUANT_READING_MIN_MS` / `JOINQUANT_READING_MAX_MS` 调整停留区间。
 
 升级后，已有 systemd 定时任务请重新执行 `schedule start <alias>`，应用延长后的 15 分钟运行上限。
 

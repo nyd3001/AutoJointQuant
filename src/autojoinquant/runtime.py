@@ -129,7 +129,7 @@ def run_automation(
     environment["JOINQUANT_PROFILE_DIR"] = user.profile_dir
     environment["JOINQUANT_PYTHON"] = sys.executable
     environment["AUTOJOINQUANT_ALIAS"] = alias
-    previous = read_last_result(alias) if execute and not diagnose else None
+    previous = read_last_result(alias) if not diagnose else None
     environment["AUTOJOINQUANT_PREVIOUS_READING"] = json.dumps(
         (previous or {}).get("reading") or {}
     )

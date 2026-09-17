@@ -103,8 +103,26 @@ def test_reading_history_is_account_scoped_and_dry_run_never_writes(tmp_path, mo
         assert runtime.run_automation(Settings(), "main", user, execute=execute,
                                       output=io.StringIO()) == 3
     assert json.loads(environments[0]["AUTOJOINQUANT_PREVIOUS_READING"]) == previous
-    assert json.loads(environments[1]["AUTOJOINQUANT_PREVIOUS_READING"]) == {}
+    assert json.loads(environments[1]["AUTOJOINQUANT_PREVIOUS_READING"]) == previous
     assert len(saved) == 1
     assert saved[0][0] == "main"
     assert saved[0][1]["checkin"]["status"] == "checked-in"
     assert saved[0][1]["exitCode"] == 3
+
+
+def test_reading_preview_result_is_hidden_and_never_saved(tmp_path, monkeypatch):
+    marker = 'AUTOJOINQUANT_RESULT=' + json.dumps({
+        "status": "dry-run-captcha-parsed", "captchaStage": "reading", "pointsAwarded": None,
+        "reading": {"captchaStage": "reading", "gapX": 120, "previewOffset": 292},
+    }) + '\n'
+    monkeypatch.setattr(runtime, "find_node", lambda configured: (Path("/bin/node"), "22.0.0"))
+    monkeypatch.setattr(runtime, "automation_script", lambda: tmp_path / "checkin.mjs")
+    monkeypatch.setattr(runtime, "read_last_result", lambda alias: None)
+    saved = []
+    monkeypatch.setattr(runtime, "write_last_result", lambda *args: saved.append(args))
+    monkeypatch.setattr(runtime.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess([marker]))
+    user = UserSettings(env_file=str(tmp_path / "user.env"), profile_dir=str(tmp_path / "profile"))
+    output = io.StringIO()
+    assert runtime.run_automation(Settings(), "main", user, execute=False, output=output) == 0
+    assert saved == []
+    assert "AUTOJOINQUANT_RESULT" not in output.getvalue()

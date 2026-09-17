@@ -1077,7 +1077,6 @@ export async function performCommunityReading(cdp, {
   },
   solve = solveCaptcha, pause = sleep, now = Date.now,
 } = {}) {
-  if (dryRun) return { status: "skipped-dry-run", pointsAwarded: 0 };
   let state = await snapshot(cdp, true);
   const baseline = state.pointsTotal;
   const finish = (status, pointsAwarded, evidence = {}) => ({
@@ -1103,20 +1102,37 @@ export async function performCommunityReading(cdp, {
     } while (now() < deadline);
   }
   if (state.task.status === "monthly-limit") return finish("monthly-limit", 0, evidence);
-  if (state.task.status !== "claimable") return finish("unconfirmed", null, evidence);
+  if (state.task.status !== "claimable") {
+    if (dryRun) throw new AppError("浏览预演未发现待领奖励，无法打开拼图；已停止，不重复浏览", 3);
+    return finish("unconfirmed", null, evidence);
+  }
   const reward = state.task.reward;
-  if (!Number.isFinite(reward) || reward <= 0) return finish("unconfirmed", null, evidence);
+  if (!Number.isFinite(reward) || reward <= 0) {
+    if (dryRun) throw new AppError("浏览预演无法识别待领奖励积分，未点击领取", 3);
+    return finish("unconfirmed", null, evidence);
+  }
   if (!await claim(cdp)) throw new AppError("浏览奖励领取按钮不可用；没有重试", 3);
   let solved = false;
   let deadline = now() + timeoutMs;
   while (now() < deadline) {
     state = await snapshot(cdp);
     if (state.failure || state.isLoginPage) throw new AppError("浏览奖励领取被拒绝或登录失效；没有重试", 3);
+    if (dryRun && ((Number.isFinite(state.pointsTotal) && state.pointsTotal !== baseline)
+      || (!state.captcha && ["available", "completed", "monthly-limit"].includes(state.task.status)))) {
+      throw new AppError("浏览预演点击后积分或任务状态已改变，未观察到预期拼图；站点可能已发奖，请检查账号，已停止", 3);
+    }
     if (state.captcha && !solved) {
+      if (dryRun) {
+        const preview = await solve(cdp, { move: false });
+        return finish("dry-run-captcha-parsed", null, {
+          ...evidence, captchaStage: "reading", captchaParsed: true,
+          gapX: preview.gapX, previewOffset: preview.previewOffset,
+        });
+      }
       solved = true; // At most one correct drag; do not retry on rejection.
       await solve(cdp);
       deadline = now() + timeoutMs;
-    } else if (!state.captcha && state.task.status !== "claimable") {
+    } else if (!dryRun && !state.captcha && state.task.status !== "claimable") {
       // Re-read server-rendered balances; a disappearing CAPTCHA alone is not success.
       state = await snapshot(cdp, true);
       if (Number.isFinite(state.pointsTotal) && Number.isFinite(state.pointsAvailable)
@@ -1127,7 +1143,41 @@ export async function performCommunityReading(cdp, {
     }
     await pause(300);
   }
+  if (dryRun) throw new AppError("等待浏览奖励拼图超时；请检查网络或增大 JOINQUANT_PAGE_READY_TIMEOUT_MS；已停止，不再次点击领取", 3);
   return finish("unconfirmed", null, evidence);
+}
+
+export async function previewCheckin(cdp, state, {
+  click = clickSignButton, wait = waitForPageOutcome, solve = solveCaptcha,
+} = {}) {
+  if (state.isLoginPage) throw new AppError("登录未完成，无法预演签到和浏览奖励", 3);
+  if (state.alreadyCheckedIn) return { status: "already-checked-in", pointsAwarded: 0 };
+  if (!state.captcha) {
+    if (!state.signButton) throw new AppError("预演未识别到签到状态，已停止", 3);
+    info("预演：点击签到按钮打开拼图，仅拖到刻意错误的位置");
+    if (!await click(cdp)) throw new AppError("预演时未能点击签到按钮", 3);
+    const outcome = await wait(cdp, "checkin");
+    if (!outcome.captcha) throw new AppError("预演点击后页面已显示已签到，未出现拼图；站点状态可能已改变，请检查账号", 3);
+  }
+  const preview = await solve(cdp, { move: false });
+  return { status: "dry-run-captcha-parsed", captchaStage: "checkin", captchaParsed: true,
+    gapX: preview.gapX, previewOffset: preview.previewOffset, pointsAwarded: null };
+}
+
+export async function performDryRun(cdp, state, {
+  previous = {}, checkinPreview = previewCheckin, readingPreview = performCommunityReading,
+} = {}) {
+  const checkin = await checkinPreview(cdp, state);
+  info("预演：进入浏览奖励阶段；有待领奖励时直接打开拼图，否则随机浏览一篇文章");
+  const reading = await readingPreview(cdp, { dryRun: true, previous });
+  const parsed = [checkin, reading].filter((result) => result.captchaParsed);
+  return {
+    status: parsed.length ? "dry-run-captcha-parsed" : "dry-run",
+    captchaParsed: parsed.length > 0,
+    captchaStage: parsed.at(-1)?.captchaStage,
+    checkin, reading, pointsAwarded: null,
+    pointsAvailable: reading.pointsAvailable, pointsTotal: reading.pointsTotal,
+  };
 }
 
 export function combineDailyResults(checkin, reading) {
@@ -1147,12 +1197,17 @@ export function combineDailyResults(checkin, reading) {
 function emitResult(result) {
   if (result.reading) {
     const labels = { claimed: "已领取", "already-completed": "今日已完成", "monthly-limit": "本月已达上限",
+      "dry-run-captcha-parsed": "拼图已计算并错位拖动（预演）",
       unconfirmed: "未确认领取成功（不自动重试）", failed: "失败（不自动重试）" };
     info(`浏览任务：${labels[result.reading.status] || result.reading.status}`);
-    info(`分项积分：签到=${result.checkin.pointsAwarded ?? "未识别"}，浏览=${result.reading.pointsAwarded ?? "未识别"}`);
+    if (!result.status.startsWith("dry-run")) {
+      info(`分项积分：签到=${result.checkin.pointsAwarded ?? "未识别"}，浏览=${result.reading.pointsAwarded ?? "未识别"}`);
+    }
   }
   if (result.status === "dry-run-captcha-parsed") {
-    const stage = result.captchaStage === "login" ? "登录拼图（尚未进入签到阶段）" : "签到拼图";
+    const names = { login: "登录拼图（尚未进入签到和浏览阶段）", checkin: "签到拼图", reading: "浏览奖励拼图" };
+    const previews = result.reading ? [result.checkin, result.reading].filter((item) => item.captchaParsed) : [result];
+    const stage = previews.map((item) => names[item.captchaStage]).join("、");
     info(`预演阶段：${stage}；已按偏离求解位置的方式拖动，流程已停止`);
   } else {
     const display = (value) => Number.isFinite(value) ? String(value) : "未识别";
@@ -1172,7 +1227,7 @@ Usage:
   node checkin.mjs --diagnose
 
 Options:
-  --dry-run   Parse CAPTCHA, drag to an intentionally wrong position, and stop
+  --dry-run   Preview check-in and reading CAPTCHAs with intentionally wrong drags
   --execute   Log in, check in, and complete one community reading task
   --diagnose  Validate local configuration without opening a browser
   --help      Show this help
@@ -1236,40 +1291,8 @@ async function main() {
       if (state.isLoginPage) throw new AppError("登录未完成", 3);
     }
     if (!CONFIG.execute) {
-      // A logged-in session shows the puzzle only after the sign-in button is
-      // clicked. Dry-run starts that flow and deliberately misses the solved
-      // position so the drag path is tested without completing the check-in.
-      if (!state.alreadyCheckedIn && state.signButton) {
-        if (!state.captcha) {
-          info("预演：点击签到按钮以打开拼图验证；仅拖到刻意错误的位置，不提交签到");
-          if (!await clickSignButton(cdp)) {
-            throw new AppError("预演时未能点击签到按钮", 3);
-          }
-          const outcome = await waitForPageOutcome(cdp, "checkin");
-          if (!outcome.captcha) {
-            throw new AppError("预演点击后页面已显示已签到，未出现拼图；站点状态可能已改变，请检查账号", 3);
-          }
-        }
-        await solveCaptcha(cdp, { move: false });
-        emitResult({
-          status: "dry-run-captcha-parsed",
-          captchaStage: "checkin",
-          captchaParsed: true,
-          pointsAwarded: null,
-          pointsAvailable: state.pointsAvailable,
-          pointsTotal: state.pointsTotal,
-        });
-        return;
-      }
-      const checkin = state.alreadyCheckedIn ? "今日已签到" : state.signButton ? "可签到" : "未识别";
-      info(`预演结果：签到状态=${checkin}，验证码=${state.captcha ? "出现" : "未出现"}`);
-      const balances = state.isLoginPage ? state : await readPoints(cdp, state);
-      emitResult({
-        status: "dry-run",
-        pointsAwarded: null,
-        pointsAvailable: balances.pointsAvailable,
-        pointsTotal: balances.pointsTotal,
-      });
+      const previous = JSON.parse(process.env.AUTOJOINQUANT_PREVIOUS_READING || "{}");
+      emitResult(await performDryRun(cdp, state, { previous }));
       return;
     }
     const checkin = await performCheckin(cdp);

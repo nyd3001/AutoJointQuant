@@ -31,7 +31,7 @@ The uv installation requires Python 3.10+, uv, Node.js 22+, and Chrome/Chromium.
 # Add an account; confirm the password when prompted
 autojoinquant config add main
 
-# Parse the puzzle, drag away from the solved position, and stop
+# Preview check-in and reading puzzles after login: one wrong drag per stage
 autojoinquant run main --dry-run
 
 # Check in, read a random article, claim points, and inspect status
@@ -49,9 +49,9 @@ autojoinquant schedule status main
 autojoinquant schedule remove main
 ```
 
-Run `--dry-run` before first use or after environment changes. Output distinguishes login and check-in puzzles; preview interacts with the site and cannot guarantee unchanged account state. Use `autojoinquant <command> --help` for all options.
+Run `--dry-run` before first use or after environment changes. After login it previews check-in, then reading: visit an article, open its reward CAPTCHA, calculate the gap, and drag once at least 64px away without attempting to pass. Already-completed tasks are skipped. A login CAPTCHA preview stops before either task; any failure stops without retry. Preview visits pages and clicks buttons, cannot guarantee unchanged site state, and never overwrites real-run history. Use `autojoinquant <command> --help` for all options.
 
-`run` (including scheduled runs) picks a random community article, avoids the previous title when possible, stays **45–90 seconds** after content loads, and claims the reading reward. A locally recorded completion skips today's task; pending rewards are claimed without another visit. Check-in and reading points are reported separately. `--dry-run` does not read articles or claim reading rewards. Set `JOINQUANT_READING_MIN_MS` / `JOINQUANT_READING_MAX_MS` to change the interval; waiting does not guarantee rewards, and unconfirmed results fail without automatic retries.
+`run` (including scheduled runs) picks a random community article, avoids the previous title when possible, stays **45–90 seconds** after content loads, and claims the reading reward. A locally recorded completion skips today's task; pending rewards need no new visit. Check-in and reading points are reported separately. Preview uses the same random browsing flow; set `JOINQUANT_READING_MIN_MS` / `JOINQUANT_READING_MAX_MS` to change the interval.
 
 After upgrading, rerun `schedule start <alias>` for existing systemd timers to apply the longer 15-minute execution limit.
 

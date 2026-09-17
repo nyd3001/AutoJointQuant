@@ -97,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--dry-run",
         action="store_true",
-        help="parse CAPTCHA, drag to an intentionally wrong position, and stop",
+        help="preview check-in and reading CAPTCHAs with intentionally wrong drags",
     )
 
     status = commands.add_parser("status", help="check environment, accounts, timers, and results")
